@@ -1,0 +1,6 @@
+{
+  "name": "Dolce Felicitá Doces e Cookies",
+  "description": "Sistema web completo para confeitaria artesanal com cardápio interativo, checkout com PIX, carrinho e gestão de pedidos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

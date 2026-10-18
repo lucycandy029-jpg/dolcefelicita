@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff8f2" />
+      <stop offset="85%" stop-color="#faeee3" />
+      <stop offset="100%" stop-color="#f3dfce" />
+    </radialGradient>
+
+    <!-- Cookie Texture Gradient -->
+    <radialGradient id="cookieGrad" cx="42%" cy="42%" r="58%">
+      <stop offset="0%" stop-color="#f5c78a" />
+      <stop offset="65%" stop-color="#df9a4c" />
+      <stop offset="100%" stop-color="#ab6222" />
+    </radialGradient>
+
+    <!-- Chocolate Chunks Gradient -->
+    <linearGradient id="chocoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#542513" />
+      <stop offset="50%" stop-color="#361408" />
+      <stop offset="100%" stop-color="#230a03" />
+    </linearGradient>
+
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#4a2211" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- Outer Double Rings -->
+  <circle cx="250" cy="250" r="236" fill="#4a2211" />
+  <circle cx="250" cy="250" r="226" fill="url(#bgGrad)" />
+  <circle cx="250" cy="250" r="218" fill="none" stroke="#4a2211" stroke-width="2.5" />
+  <circle cx="250" cy="250" r="212" fill="none" stroke="#e0b896" stroke-width="1.5" stroke-dasharray="3 3" />
+
+  <!-- TOP ILLUSTRATION: Bitten Chocolate Chip Cookie & Floating Heart -->
+  <g transform="translate(190, 48) scale(0.92)" filter="url(#shadow)">
+    <!-- Cookie Body with bite mark on top right -->
+    <path d="M 65 0 
+             C 105 0, 130 30, 128 55
+             C 124 58, 115 62, 118 72
+             C 122 82, 110 88, 112 98
+             C 114 108, 102 118, 92 124
+             C 75 132, 45 134, 25 125
+             C 5 116, -5 95, 0 70
+             C 5 45, 25 0, 65 0 Z" 
+          fill="url(#cookieGrad)" 
+          stroke="#93521b" 
+          stroke-width="2" />
+
+    <!-- Bite crumb accents -->
+    <circle cx="122" cy="65" r="2" fill="#ab6222" />
+    <circle cx="118" cy="85" r="1.5" fill="#df9a4c" />
+    <circle cx="108" cy="115" r="2" fill="#ab6222" />
+
+    <!-- Chocolate Chunks -->
+    <!-- Chunk 1 Center-Top -->
+    <polygon points="68,32 82,24 88,40 76,46" fill="url(#chocoGrad)" rx="2" />
+    <polygon points="70,34 80,27 82,35" fill="#75351c" opacity="0.6" />
+
+    <!-- Chunk 2 Left -->
+    <polygon points="25,55 42,50 38,68 22,66" fill="url(#chocoGrad)" />
+    
+    <!-- Chunk 3 Center-Low -->
+    <polygon points="50,78 68,75 72,92 52,95" fill="url(#chocoGrad)" />
+    <polygon points="53,80 66,78 62,86" fill="#75351c" opacity="0.6" />
+
+    <!-- Chunk 4 Right -->
+    <polygon points="85,62 100,58 98,72 82,70" fill="url(#chocoGrad)" />
+
+    <!-- Chunk 5 Bottom -->
+    <polygon points="35,98 48,94 46,110 32,106" fill="url(#chocoGrad)" />
+
+    <!-- Small morsels & specks -->
+    <circle cx="48" cy="38" r="3" fill="#361408" />
+    <circle cx="95" cy="98" r="3.5" fill="#361408" />
+    <circle cx="20" cy="85" r="2.5" fill="#361408" />
+    <circle cx="65" cy="60" r="2" fill="#ab6222" />
+
+    <!-- Radiating Love Heart (top right of cookie) -->
+    <g transform="translate(132, 2)">
+      <path d="M 12,22 C 12,22 0,14 0,7 C 0,3 3,0 7,0 C 9.5,0 11.5,1.5 12,3 C 12.5,1.5 14.5,0 17,0 C 21,0 24,3 24,7 C 24,14 12,22 12,22 Z"
+            fill="none" 
+            stroke="#4a2211" 
+            stroke-width="3" 
+            stroke-linecap="round" 
+            stroke-linejoin="round" />
+      <!-- Radiating sparkles -->
+      <line x1="28" y1="12" x2="38" y2="15" stroke="#4a2211" stroke-width="2.5" stroke-linecap="round" />
+      <line x1="26" y1="2" x2="35" y2="-4" stroke="#4a2211" stroke-width="2.5" stroke-linecap="round" />
+    </g>
+  </g>
+
+  <!-- BRAND NAME: Felicitá -->
+  <g transform="translate(250, 275)" text-anchor="middle">
+    <!-- Stylized cursive script -->
+    <text font-family="'Brush Script MT', 'Dancing Script', 'Playfair Display', Georgia, cursive"
+          font-size="108"
+          font-weight="bold"
+          font-style="italic"
+          fill="#4a2211"
+          letter-spacing="-1">
+      Felicitá
+    </text>
+    <!-- Little decorative heart after the word -->
+    <path d="M 172,-16 C 172,-16 164,-22 164,-27 C 164,-30 166,-32 169,-32 C 171,-32 172,-31 172,-30 C 172,-31 173,-32 175,-32 C 178,-32 180,-30 180,-27 C 180,-22 172,-16 172,-16 Z"
+          fill="#4a2211" />
+  </g>
+
+  <!-- SUBTITLE: ♥ COOKIES ♥ -->
+  <g transform="translate(250, 318)" text-anchor="middle">
+    <text font-family="'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif"
+          font-size="24"
+          font-weight="800"
+          fill="#4a2211"
+          letter-spacing="9">
+      COOKIES
+    </text>
+    <!-- Left Heart -->
+    <path d="M -96,-8 C -96,-8 -103,-14 -103,-18 C -103,-21 -101,-23 -98,-23 C -96.5,-23 -96,-22 -96,-21 C -96,-22 -95.5,-23 -94,-23 C -91,-23 -89,-21 -89,-18 C -89,-14 -96,-8 -96,-8 Z"
+          fill="#b85d3b" />
+    <!-- Right Heart -->
+    <path d="M 104,-8 C 104,-8 97,-14 97,-18 C 97,-21 99,-23 102,-23 C 103.5,-23 104,-22 104,-21 C 104,-22 104.5,-23 106,-23 C 109,-23 111,-21 111,-18 C 111,-14 104,-8 104,-8 Z"
+          fill="#b85d3b" />
+  </g>
+
+  <!-- DIVIDER LINE WITH CENTRAL HEART -->
+  <g transform="translate(250, 345)">
+    <line x1="-80" y1="0" x2="-15" y2="0" stroke="#4a2211" stroke-width="2" stroke-linecap="round" />
+    <!-- Heart in center -->
+    <path d="M 0,6 C 0,6 -7,0 -7,-4 C -7,-7 -5,-9 -2,-9 C -0.5,-9 0,-8 0,-7 C 0,-8 0.5,-9 2,-9 C 5,-9 7,-7 7,-4 C 7,0 0,6 0,6 Z"
+          fill="#b85d3b" />
+    <line x1="15" y1="0" x2="80" y2="0" stroke="#4a2211" stroke-width="2" stroke-linecap="round" />
+  </g>
+
+  <!-- TAGLINE: Um pedacinho de felicidade em cada mordida. -->
+  <g transform="translate(250, 385)" text-anchor="middle">
+    <text font-family="'Brush Script MT', 'Dancing Script', Georgia, cursive"
+          font-size="25"
+          font-style="italic"
+          fill="#4a2211"
+          letter-spacing="0.5">
+      Um pedacinho de felicidade
+    </text>
+    <text y="28"
+          font-family="'Brush Script MT', 'Dancing Script', Georgia, cursive"
+          font-size="25"
+          font-style="italic"
+          fill="#4a2211"
+          letter-spacing="0.5">
+      em cada mordida.
+    </text>
+  </g>
+
+  <!-- BOTTOM DECORATIVE FLOURISH -->
+  <g transform="translate(250, 442)">
+    <path d="M -45,-4 Q -25,4 -10,-1 Q 0,-4 0,0 Q 0,-4 10,-1 Q 25,4 45,-4" 
+          fill="none" 
+          stroke="#4a2211" 
+          stroke-width="2" 
+          stroke-linecap="round" />
+    <path d="M 0,2 C 0,2 -5,-3 -5,-6 C -5,-8 -3.5,-9.5 -1.5,-9.5 C -0.5,-9.5 0,-8.8 0,-8 C 0,-8.8 0.5,-9.5 1.5,-9.5 C 3.5,-9.5 5,-8 5,-6 C 5,-3 0,2 0,2 Z"
+          fill="#b85d3b" />
+  </g>
+</svg>

@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary: #9c3e54;
+    --on-primary: #ffffff;
+    --primary-container: #e87a90;
+    --on-primary-container: #64132b;
+    --primary-fixed: #ffd9de;
+    --on-primary-fixed: #3f0015;
+    
+    --secondary: #7f5347;
+    --on-secondary: #ffffff;
+    --secondary-container: #fec4b4;
+    --on-secondary-container: #7a4f42;
+    --secondary-fixed: #ffdbd1;
+    --on-secondary-fixed: #311309;
+    
+    --tertiary: #994703;
+    --on-tertiary: #ffffff;
+    --tertiary-container: #e6813f;
+    --on-tertiary-container: #572500;
+    --tertiary-fixed: #ffdbc9;
+    --on-tertiary-fixed: #321200;
+
+    --surface: #fef8f3;
+    --surface-bright: #fef8f3;
+    --surface-container-lowest: #ffffff;
+    --surface-container-low: #f8f3ee;
+    --surface-container: #f2ede8;
+    --surface-container-high: #ece7e2;
+    --surface-container-highest: #e6e2dd;
+    --on-surface: #1d1b19;
+    --on-surface-variant: #554245;
+    --outline: #877274;
+    --outline-variant: #dac0c3;
+  }
+
+  body {
+    background-color: #fef8f3;
+    color: #1d1b19;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f8f3ee;
+}
+::-webkit-scrollbar-thumb {
+  background: #dac0c3;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9c3e54;
+}
+
+/* Print formatting for Motoboy / Courier Comanda */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt;
+  }
+
+  /* Hide normal UI when printing comanda */
+  header,
+  footer,
+  aside,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .printable-comanda-container {
+    display: block !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    z-index: 999999 !important;
+    page-break-after: avoid !important;
+  }
+}
