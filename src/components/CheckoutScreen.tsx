@@ -25,7 +25,7 @@ interface CheckoutScreenProps {
   onRemoveItem: (itemId: string) => void;
   onNavigateToMenu: () => void;
   onConfirmOrder: (orderData: Partial<Order>) => void;
-  activeAddress: Address;
+  activeAddress?: Address | null;
   onUpdateAddress: (newAddress: Address) => void;
 }
 
@@ -109,7 +109,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
       total,
       paymentMethod,
       paymentStatus: paymentMethod === 'pix' ? 'approved' : 'pending',
-      address: activeAddress,
+      address: activeAddress || undefined,
       includeEcoUtensils: ecoUtensils,
       notes: 'Por favor tocar o interfone 82 e deixar na portaria caso não atenda de imediato. Obrigado!'
     });
@@ -275,36 +275,57 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 </div>
 
                 {/* Active Address Card */}
-                <div className="p-4 rounded-2xl bg-[#f8f3ee] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-[#dac0c3]/20">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#ffd9de] flex items-center justify-center text-[#9c3e54] shrink-0">
-                      <span className="material-symbols-outlined text-[24px]">home</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-[#1d1b19] font-heading">{activeAddress.title}</span>
-                        <span className="text-[10px] bg-[#9c3e54] text-white px-2 py-0.5 rounded-full uppercase font-bold">
-                          Padrão
-                        </span>
+                {activeAddress && activeAddress.street ? (
+                  <div className="p-4 rounded-2xl bg-[#f8f3ee] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-[#dac0c3]/20">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-full bg-[#ffd9de] flex items-center justify-center text-[#9c3e54] shrink-0">
+                        <span className="material-symbols-outlined text-[24px]">home</span>
                       </div>
-                      <p className="text-xs text-[#1d1b19] mt-0.5">
-                        {activeAddress.street}, {activeAddress.number}
-                        {activeAddress.complement ? ` — ${activeAddress.complement}` : ''} — {activeAddress.neighborhood}, {activeAddress.city} - {activeAddress.state}
-                      </p>
-                      {activeAddress.referencePoint && (
-                        <p className="text-[11px] text-[#877274] mt-0.5">
-                          Ref: {activeAddress.referencePoint}
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-[#1d1b19] font-heading">{activeAddress.title || 'Endereço Principal'}</span>
+                          <span className="text-[10px] bg-[#9c3e54] text-white px-2 py-0.5 rounded-full uppercase font-bold">
+                            Padrão
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#1d1b19] mt-0.5">
+                          {activeAddress.street}, {activeAddress.number}
+                          {activeAddress.complement ? ` — ${activeAddress.complement}` : ''} — {activeAddress.neighborhood}, {activeAddress.city} - {activeAddress.state}
                         </p>
-                      )}
+                        {activeAddress.referencePoint && (
+                          <p className="text-[11px] text-[#877274] mt-0.5">
+                            Ref: {activeAddress.referencePoint}
+                          </p>
+                        )}
+                      </div>
                     </div>
+                    <button
+                      onClick={() => setShowNewAddressForm(!showNewAddressForm)}
+                      className="px-4 py-1.5 rounded-full bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19] text-xs font-bold transition-colors cursor-pointer self-end md:self-auto"
+                    >
+                      Trocar
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setShowNewAddressForm(!showNewAddressForm)}
-                    className="px-4 py-1.5 rounded-full bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19] text-xs font-bold transition-colors cursor-pointer self-end md:self-auto"
-                  >
-                    Trocar
-                  </button>
-                </div>
+                ) : (
+                  <div className="p-5 rounded-2xl bg-[#f8f3ee] border border-dashed border-[#dac0c3] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#ffd9de] flex items-center justify-center text-[#9c3e54] shrink-0">
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-[#1d1b19]">Nenhum endereço cadastrado</p>
+                        <p className="text-[11px] text-[#7f5347]">Informe onde deseja receber sua encomenda.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewAddressForm(true)}
+                      className="px-4 py-2 rounded-full bg-[#9c3e54] text-white text-xs font-bold hover:bg-[#64132b] transition-colors shadow-sm shrink-0 cursor-pointer"
+                    >
+                      + Cadastrar Endereço
+                    </button>
+                  </div>
+                )}
 
                 {/* Collapsible New Address Form */}
                 <div className="mt-4">
@@ -455,7 +476,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     )}
                   </label>
 
-                  {/* Option 2: Cartão de Crédito */}
+                  {/* Option 2: Cartão de Crédito na Maquininha Física */}
                   <label
                     onClick={() => setPaymentMethod('credit')}
                     className={`flex flex-col p-4 rounded-2xl cursor-pointer border transition-all ${
@@ -474,72 +495,81 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                           className="w-4 h-4 text-[#9c3e54] accent-[#9c3e54]"
                         />
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-[#1d1b19]">Cartão de Crédito Online</span>
-                          <p className="text-xs text-[#554245]">Mastercard, Visa, Elo, Hipercard, Amex</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-[#1d1b19]">Cartão de Crédito (Maquininha no Ato da Entrega)</span>
+                            <span className="text-[10px] bg-[#f2ede8] text-[#7f5347] px-2 py-0.5 rounded-full font-bold">
+                              Presencial
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#554245]">O motoboy levará a maquininha física (todas as bandeiras e aproximação)</p>
                         </div>
                       </div>
-                      <CreditCard className="w-6 h-6 text-[#7f5347]" />
+                      <CreditCard className="w-6 h-6 text-[#9c3e54]" />
                     </div>
 
                     {paymentMethod === 'credit' && (
-                      <div className="mt-4 pt-4 border-t border-[#dac0c3]/30 flex flex-col gap-2.5">
-                        <input
-                          type="text"
-                          value={cardNumber}
-                          onChange={e => setCardNumber(e.target.value)}
-                          placeholder="Número do cartão (0000 0000 0000 0000)"
-                          className="w-full px-4 py-2 rounded-full bg-white text-xs border border-[#dac0c3]/40 focus:outline-none"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
-                            value={cardExpiry}
-                            onChange={e => setCardExpiry(e.target.value)}
-                            placeholder="Validade (MM/AA)"
-                            className="w-full px-4 py-2 rounded-full bg-white text-xs border border-[#dac0c3]/40 focus:outline-none"
-                          />
-                          <input
-                            type="text"
-                            value={cardCvv}
-                            onChange={e => setCardCvv(e.target.value)}
-                            placeholder="CVV (3 dígitos)"
-                            className="w-full px-4 py-2 rounded-full bg-white text-xs border border-[#dac0c3]/40 focus:outline-none"
-                          />
+                      <div className="mt-3 pt-3 border-t border-[#dac0c3]/30 bg-white/80 rounded-xl p-3 flex flex-col gap-1.5 text-xs">
+                        <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          <span>Pagamento seguro via maquininha física no ato da entrega</span>
                         </div>
-                        <input
-                          type="text"
-                          value={cardHolder}
-                          onChange={e => setCardHolder(e.target.value)}
-                          placeholder="Nome impresso no cartão"
-                          className="w-full px-4 py-2 rounded-full bg-white text-xs border border-[#dac0c3]/40 focus:outline-none"
-                        />
+                        <p className="text-[#554245] text-[11px] leading-relaxed">
+                          Nenhum dado do seu cartão é digitado online. Você passa, insere ou aproxima seu cartão diretamente na máquina física levada pelo entregador.
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 pt-1 text-[10px] text-[#7f5347]">
+                          <span className="px-2 py-0.5 rounded-md bg-[#f2ede8]">Visa</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#f2ede8]">Mastercard</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#f2ede8]">Elo</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#f2ede8]">Hipercard</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#f2ede8]">Amex</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#f2ede8]">Aproximação NFC</span>
+                        </div>
                       </div>
                     )}
                   </label>
 
-                  {/* Option 3: Débito na Entrega */}
+                  {/* Option 3: Débito na Maquininha Física */}
                   <label
                     onClick={() => setPaymentMethod('debit')}
-                    className={`flex items-center justify-between p-4 rounded-2xl cursor-pointer border transition-all ${
+                    className={`flex flex-col p-4 rounded-2xl cursor-pointer border transition-all ${
                       paymentMethod === 'debit'
                         ? 'bg-[#ffd9de]/20 border-[#9c3e54] shadow-sm'
                         : 'bg-[#f8f3ee] border-transparent hover:bg-[#f2ede8]'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="payment"
-                        checked={paymentMethod === 'debit'}
-                        onChange={() => setPaymentMethod('debit')}
-                        className="w-4 h-4 text-[#9c3e54] accent-[#9c3e54]"
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-[#1d1b19]">Cartão de Débito (Maquininha na Entrega)</span>
-                        <p className="text-xs text-[#554245]">O entregador levará a maquininha sem contato (Aproximação)</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="payment"
+                          checked={paymentMethod === 'debit'}
+                          onChange={() => setPaymentMethod('debit')}
+                          className="w-4 h-4 text-[#9c3e54] accent-[#9c3e54]"
+                        />
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-[#1d1b19]">Cartão de Débito (Maquininha no Ato da Entrega)</span>
+                            <span className="text-[10px] bg-[#f2ede8] text-[#7f5347] px-2 py-0.5 rounded-full font-bold">
+                              Presencial
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#554245]">O motoboy levará a maquininha física (débito em conta ou aproximação)</p>
+                        </div>
                       </div>
+                      <span className="material-symbols-outlined text-[#9c3e54] text-[24px]">contactless</span>
                     </div>
-                    <span className="material-symbols-outlined text-[#7f5347] text-[24px]">contactless</span>
+
+                    {paymentMethod === 'debit' && (
+                      <div className="mt-3 pt-3 border-t border-[#dac0c3]/30 bg-white/80 rounded-xl p-3 flex flex-col gap-1.5 text-xs">
+                        <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          <span>Pagamento seguro via maquininha física no ato da entrega</span>
+                        </div>
+                        <p className="text-[#554245] text-[11px] leading-relaxed">
+                          Pague pelo débito ao receber sua encomenda, direto com o entregador através da maquininha sem contato.
+                        </p>
+                      </div>
+                    )}
                   </label>
 
                   {/* Option 4: Dinheiro */}

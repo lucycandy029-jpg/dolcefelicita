@@ -151,8 +151,10 @@ export interface Customer {
   email: string;
   phone: string;
   city: string;
+  address?: Address;
   ordersCount: number;
   totalSpent: number;
   isActive: boolean;
   createdAt: string;
 }
+

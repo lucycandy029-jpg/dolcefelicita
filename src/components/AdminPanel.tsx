@@ -30,7 +30,8 @@ import {
   FileText,
   LogOut,
   Navigation,
-  MapPin
+  MapPin,
+  Phone
 } from 'lucide-react';
 import { Order, Product, OrderStatus, Category, ProductAddon, StoreSettings, Customer } from '../types';
 
@@ -49,7 +50,10 @@ interface AdminPanelProps {
   onDeleteCategory: (categoryId: string) => void;
   onAddAddon: (addon: ProductAddon) => void;
   onDeleteAddon: (addonId: string) => void;
+  onDeleteCustomer?: (customerId: string) => void;
+  onSetProductStock?: (productId: string, quantity: number) => void;
   onUpdateStoreSettings: (settings: StoreSettings) => void;
+  onUpdateOrderCourier?: (orderId: string, courierName: string, courierPhone: string) => void;
   onLogout?: () => void;
 }
 
@@ -68,12 +72,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onDeleteCategory,
   onAddAddon,
   onDeleteAddon,
+  onDeleteCustomer,
+  onSetProductStock,
   onUpdateStoreSettings,
+  onUpdateOrderCourier,
   onLogout
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<
     'orders' | 'products' | 'addons' | 'categories' | 'customers' | 'inventory' | 'store' | 'finances'
   >('orders');
+
+  // In-App Confirmation Modal state (prevents issues with browser confirm() in iframes)
+  const [deleteModalState, setDeleteModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    itemType: 'product' | 'addon' | 'category' | 'customer' | 'stock_zero' | 'stock_delete';
+    itemId: string;
+    itemName: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    itemType: 'product',
+    itemId: '',
+    itemName: ''
+  });
+
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setFeedbackToast(msg);
+    setTimeout(() => setFeedbackToast(null), 3000);
+  };
 
   // WhatsApp modal state for client
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState<boolean>(false);
@@ -87,6 +118,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [courierNameInput, setCourierNameInput] = useState<string>('Mateus Siqueira');
   const [courierPhoneInput, setCourierPhoneInput] = useState<string>('(11) 98765-4321');
   const [comandaCopiedFeedback, setComandaCopiedFeedback] = useState<boolean>(false);
+
+  // Courier phone & name edit modal state
+  const [courierEditModalOpen, setCourierEditModalOpen] = useState<boolean>(false);
+  const [selectedOrderForCourierEdit, setSelectedOrderForCourierEdit] = useState<Order | null>(null);
+  const [editingCourierName, setEditingCourierName] = useState<string>('');
+  const [editingCourierPhone, setEditingCourierPhone] = useState<string>('');
 
   // New Product Modal Form State
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
@@ -287,6 +324,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setComandaCopiedFeedback(false);
   };
 
+  const openCourierEditModal = (order: Order) => {
+    setSelectedOrderForCourierEdit(order);
+    setEditingCourierName(order.courier?.name || 'Mateus Siqueira');
+    setEditingCourierPhone(order.courier?.phone || '(11) 98765-4321');
+    setCourierEditModalOpen(true);
+  };
+
+  const handleSaveCourierFromModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderForCourierEdit) return;
+    if (onUpdateOrderCourier) {
+      onUpdateOrderCourier(selectedOrderForCourierEdit.id, editingCourierName, editingCourierPhone);
+    }
+    showToast(`Telefone do entregador atualizado para: ${editingCourierPhone}`);
+    setCourierEditModalOpen(false);
+  };
+
+  const handleSaveCourierFromComanda = () => {
+    if (!selectedOrderForComanda) return;
+    if (onUpdateOrderCourier) {
+      onUpdateOrderCourier(selectedOrderForComanda.id, courierNameInput, courierPhoneInput);
+    }
+    setSelectedOrderForComanda(prev => prev ? {
+      ...prev,
+      courier: {
+        ...prev.courier,
+        name: courierNameInput,
+        phone: courierPhoneInput,
+        avatarUrl: prev.courier?.avatarUrl || '',
+        rating: prev.courier?.rating || 4.9,
+        deliveriesCount: prev.courier?.deliveriesCount || 100
+      }
+    } : null);
+    showToast(`Telefone do entregador salvo no pedido: ${courierPhoneInput}`);
+  };
+
   const getCourierWhatsAppMessage = (order: Order, courierName: string): string => {
     const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${order.address.street}, ${order.address.number}, ${order.address.neighborhood}, ${order.address.city}`)}`;
     const itemsList = order.items
@@ -298,8 +371,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       .join('\n');
 
     const paymentInfo = order.paymentStatus === 'approved'
-      ? `✅ *JÁ PAGO ONLINE VIA ${order.paymentMethod.toUpperCase()}* — *NÃO COBRAR NADA DO CLIENTE!*`
-      : `⚠️ *COBRAR DO CLIENTE NA ENTREGA:* R$ ${order.total.toFixed(2).replace('.', ',')} (${order.paymentMethod.toUpperCase()})`;
+      ? `✅ *JÁ PAGO ONLINE (PIX)* — *NÃO COBRAR NADA DO CLIENTE!*`
+      : (order.paymentMethod === 'credit' || order.paymentMethod === 'debit')
+      ? `⚠️ *COBRAR NA ENTREGA VIA MAQUININHA FÍSICA:* R$ ${order.total.toFixed(2).replace('.', ',')} (${order.paymentMethod === 'credit' ? 'Cartão de Crédito' : 'Cartão de Débito'})`
+      : `⚠️ *COBRAR DO CLIENTE NA ENTREGA (DINHEIRO):* R$ ${order.total.toFixed(2).replace('.', ',')}`;
 
     return `🧁 *DOLCE FELICITÁ DOCES E COOKIES* 🛵
 *COMANDA DE ENTREGA — PEDIDO #${order.orderNumber}*
@@ -352,6 +427,74 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
 
   const handlePrintComanda = () => {
     window.print();
+  };
+
+  // In-App Deletion handlers (Reliable, no browser alert/confirm dependency)
+  const requestDelete = (
+    itemType: 'product' | 'addon' | 'category' | 'customer' | 'stock_zero' | 'stock_delete',
+    itemId: string,
+    itemName: string
+  ) => {
+    let title = 'Confirmar Exclusão';
+    let message = '';
+
+    if (itemType === 'product') {
+      title = 'Excluir Doce do Cardápio';
+      message = `Tem certeza que deseja excluir "${itemName}" do cardápio? Ele deixará de ser comercializado e exibido no cardápio.`;
+    } else if (itemType === 'addon') {
+      title = 'Excluir Item de Personalização';
+      message = `Tem certeza que deseja excluir o opcional "${itemName}"? Os clientes não poderão mais adicioná-lo.`;
+    } else if (itemType === 'category') {
+      title = 'Excluir Categoria';
+      message = `Tem certeza que deseja excluir a categoria "${itemName}"?`;
+    } else if (itemType === 'customer') {
+      title = 'Excluir Cadastro do Cliente';
+      message = `Tem certeza que deseja excluir o cliente "${itemName}" da lista?`;
+    } else if (itemType === 'stock_zero') {
+      title = 'Zerar Saldo em Estoque';
+      message = `Deseja realmente zerar o estoque de "${itemName}"? O saldo disponível ficará em 0 unidades.`;
+    } else if (itemType === 'stock_delete') {
+      title = 'Excluir Item do Estoque';
+      message = `Tem certeza que deseja excluir definitivamente "${itemName}" do estoque e do catálogo?`;
+    }
+
+    setDeleteModalState({
+      isOpen: true,
+      title,
+      message,
+      itemType,
+      itemId,
+      itemName
+    });
+  };
+
+  const handleConfirmDelete = () => {
+    const { itemType, itemId, itemName } = deleteModalState;
+    if (itemType === 'product' || itemType === 'stock_delete') {
+      onDeleteProduct(itemId);
+      showToast(`"${itemName}" foi excluído com sucesso!`);
+    } else if (itemType === 'addon') {
+      onDeleteAddon(itemId);
+      showToast(`Opcional "${itemName}" foi excluído com sucesso!`);
+    } else if (itemType === 'category') {
+      onDeleteCategory(itemId);
+      showToast(`Categoria "${itemName}" foi excluída com sucesso!`);
+    } else if (itemType === 'customer') {
+      if (onDeleteCustomer) {
+        onDeleteCustomer(itemId);
+        showToast(`Cliente "${itemName}" foi excluído com sucesso!`);
+      }
+    } else if (itemType === 'stock_zero') {
+      if (onSetProductStock) {
+        onSetProductStock(itemId, 0);
+      } else {
+        const prod = products.find(p => p.id === itemId);
+        if (prod) onAddStockBatch(itemId, -(prod.stockAvailable || 0));
+      }
+      showToast(`Estoque de "${itemName}" foi zerado com sucesso!`);
+    }
+
+    setDeleteModalState(prev => ({ ...prev, isOpen: false }));
   };
 
   const handleSaveStoreSettings = (e: React.FormEvent) => {
@@ -592,9 +735,38 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                       <span className="text-[#7f5347]">
                         Entrega: {orderItem.address.street}, {orderItem.address.number} ({orderItem.address.neighborhood})
                       </span>
-                      <span className="text-xs bg-white px-2 py-0.5 rounded-full border border-[#dac0c3]/40">
-                        {orderItem.paymentMethod.toUpperCase()} ({orderItem.paymentStatus})
+                      <span className="text-[11px] bg-white px-2.5 py-0.5 rounded-full border border-[#dac0c3]/40 font-semibold text-[#1d1b19]">
+                        {orderItem.paymentMethod === 'pix'
+                          ? 'PIX (Online Pago)'
+                          : orderItem.paymentMethod === 'credit'
+                          ? 'Crédito (Maquininha na Entrega)'
+                          : orderItem.paymentMethod === 'debit'
+                          ? 'Débito (Maquininha na Entrega)'
+                          : 'Dinheiro na Entrega'}
                       </span>
+                    </div>
+
+                    {/* Entregador designado e Telefone editável */}
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#dac0c3]/20 flex-wrap text-xs">
+                      <span className="text-[11px] font-bold text-[#7f5347] flex items-center gap-1">
+                        <Navigation className="w-3.5 h-3.5 text-[#9c3e54]" />
+                        Entregador:
+                      </span>
+                      <strong className="text-[#1d1b19]">
+                        {orderItem.courier?.name || 'Mateus Siqueira'}
+                      </strong>
+                      <span className="text-[#554245] flex items-center gap-1">
+                        • WhatsApp/Tel: <strong>{orderItem.courier?.phone || '(11) 98765-4321'}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openCourierEditModal(orderItem)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffd9de]/50 border border-[#dac0c3]/50 text-[11px] font-bold text-[#9c3e54] transition-all cursor-pointer shadow-xs ml-auto"
+                        title="Editar nome e telefone do entregador deste pedido"
+                      >
+                        <Phone className="w-3 h-3 text-[#9c3e54]" />
+                        <span>Editar Telefone</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -716,13 +888,10 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                     Estoque: <strong>{product.stockAvailable || 20} un</strong>
                   </span>
                   <button
-                    onClick={() => {
-                      if (confirm(`Tem certeza que deseja excluir "${product.name}" do cardápio?`)) {
-                        onDeleteProduct(product.id);
-                      }
-                    }}
-                    className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 flex items-center gap-1 font-bold transition-colors cursor-pointer"
-                    title="Excluir produto"
+                    type="button"
+                    onClick={() => requestDelete('product', product.id, product.name)}
+                    className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                    title="Excluir doce do cardápio"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Excluir</span>
@@ -775,12 +944,10 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
 
                 <div className="pt-3 mt-3 border-t border-[#dac0c3]/30 flex justify-end">
                   <button
-                    onClick={() => {
-                      if (confirm(`Remover o opcional "${addon.name}"?`)) {
-                        onDeleteAddon(addon.id);
-                      }
-                    }}
-                    className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 font-bold cursor-pointer"
+                    type="button"
+                    onClick={() => requestDelete('addon', addon.id, addon.name)}
+                    className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1 font-bold cursor-pointer transition-colors p-1 rounded-lg hover:bg-rose-50"
+                    title="Excluir item de personalização"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Excluir</span>
@@ -833,12 +1000,9 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
 
                 {cat.id !== 'all' && (
                   <button
-                    onClick={() => {
-                      if (confirm(`Excluir a categoria "${cat.name}"?`)) {
-                        onDeleteCategory(cat.id);
-                      }
-                    }}
-                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                    type="button"
+                    onClick={() => requestDelete('category', cat.id, cat.name)}
+                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
                     title="Excluir Categoria"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -904,15 +1068,25 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                       R$ {cust.totalSpent.toFixed(2).replace('.', ',')}
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <a
-                        href={`https://wa.me/${cleanPhoneForWhatsApp(cust.phone)}?text=${encodeURIComponent(`Olá ${cust.name}! Somos da Felicitá Doces e Cookies. Como podemos adoçar seu dia hoje?`)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-[11px] transition-colors"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        <span>WhatsApp</span>
-                      </a>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <a
+                          href={`https://wa.me/${cleanPhoneForWhatsApp(cust.phone)}?text=${encodeURIComponent(`Olá ${cust.name}! Somos da Felicitá Doces e Cookies. Como podemos adoçar seu dia hoje?`)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-[11px] transition-colors"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>WhatsApp</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => requestDelete('customer', cust.id, cust.name)}
+                          className="inline-flex items-center gap-1 p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Excluir cadastro do cliente"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1123,22 +1297,16 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                         <td className="py-3 px-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => {
-                                if (window.confirm(`Deseja zerar a quantidade em estoque de "${product.name}"?`)) {
-                                  onAddStockBatch(product.id, -(product.stockAvailable || 0));
-                                }
-                              }}
+                              type="button"
+                              onClick={() => requestDelete('stock_zero', product.id, product.name)}
                               className="px-2 py-1 rounded-lg text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold text-[11px] border border-amber-200 transition-colors cursor-pointer"
                               title="Zerar quantidade em estoque"
                             >
                               Zerar
                             </button>
                             <button
-                              onClick={() => {
-                                if (window.confirm(`Tem certeza que deseja excluir "${product.name}" do estoque? Este doce deixará de constar no estoque e no catálogo.`)) {
-                                  onDeleteProduct(product.id);
-                                }
-                              }}
+                              type="button"
+                              onClick={() => requestDelete('stock_delete', product.id, product.name)}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 font-bold text-[11px] border border-rose-200 transition-colors cursor-pointer shadow-sm"
                               title="Excluir item definitivamente do estoque"
                             >
@@ -1618,6 +1786,441 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 5: COMANDA DO ENTREGADOR (IMPRESSÃO TÉRMICA & ENVIO WHATSAPP)
+         ========================================================================= */}
+      {comandaModalOpen && selectedOrderForComanda && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-[#dac0c3]/40 flex flex-col my-auto max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95">
+            {/* Modal Top Bar (hidden during print) */}
+            <div className="p-4 sm:p-5 border-b border-[#f2ede8] flex items-center justify-between bg-[#fcf9f6] no-print">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#ffd9de] text-[#9c3e54] flex items-center justify-center font-bold">
+                  <Printer className="w-5 h-5 text-[#9c3e54]" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-[#1d1b19] font-heading flex items-center gap-2">
+                    <span>Comanda de Entrega para o Entregador</span>
+                    <span className="text-xs bg-[#9c3e54] text-white px-2.5 py-0.5 rounded-full font-bold">
+                      #{selectedOrderForComanda.orderNumber}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[#554245]">
+                    Imprima para fixar na embalagem ou envie todos os dados prontos no WhatsApp do motoboy.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setComandaModalOpen(false)}
+                className="text-[#877274] hover:text-[#1d1b19] p-1.5 rounded-full hover:bg-white cursor-pointer transition-colors"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Courier configuration bar (no-print) */}
+            <div className="p-4 bg-[#f8f3ee] border-b border-[#dac0c3]/30 flex flex-col sm:flex-row items-end gap-3 text-xs no-print">
+              <div className="flex-1 w-full flex flex-col gap-1">
+                <label className="font-bold text-[#7f5347] uppercase text-[10px]">
+                  Nome do Entregador (Motoboy):
+                </label>
+                <input
+                  type="text"
+                  value={courierNameInput}
+                  onChange={e => setCourierNameInput(e.target.value)}
+                  placeholder="Nome do motoboy"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white text-xs border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                />
+              </div>
+              <div className="flex-1 w-full flex flex-col gap-1">
+                <label className="font-bold text-[#7f5347] uppercase text-[10px]">
+                  WhatsApp / Telefone do Entregador:
+                </label>
+                <input
+                  type="text"
+                  value={courierPhoneInput}
+                  onChange={e => setCourierPhoneInput(e.target.value)}
+                  placeholder="(11) 98765-4321"
+                  className="w-full px-3 py-1.5 rounded-xl bg-white text-xs border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveCourierFromComanda}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#9c3e54] hover:bg-[#64132b] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                title="Salvar alterações de nome e telefone do entregador no pedido"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Salvar Telefone</span>
+              </button>
+            </div>
+
+            {/* Scrollable Ticket Area & Printable View */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-white">
+              {/* THE COMANDA TICKET */}
+              <div className="printable-comanda-container max-w-lg mx-auto bg-white border-2 border-dashed border-[#dac0c3] p-5 sm:p-6 rounded-2xl font-mono text-xs text-[#1d1b19] shadow-sm">
+                {/* Bakery Branding Header */}
+                <div className="text-center pb-3 border-b-2 border-dashed border-gray-300">
+                  <h4 className="text-base font-black tracking-wider uppercase font-sans text-[#311309]">
+                    DOLCE FELICITÁ DOCES E COOKIES
+                  </h4>
+                  <p className="text-[10px] text-gray-600 mt-0.5">
+                    Confeitaria Artesanal • CNPJ: {storeSettings.cnpj || '45.892.102/0001-44'}
+                  </p>
+                  <p className="text-[10px] text-gray-600">
+                    {storeSettings.address} • Tel: {storeSettings.phone}
+                  </p>
+                  <div className="mt-2 py-1 px-3 bg-[#f2ede8] rounded-md font-bold text-xs inline-block">
+                    ★ COMANDA DO ENTREGADOR / DELIVERY SLIP ★
+                  </div>
+                </div>
+
+                {/* Order & Courier Meta */}
+                <div className="py-3 border-b border-dashed border-gray-300 grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-gray-500 block text-[9px] uppercase font-bold">Pedido:</span>
+                    <strong className="text-sm font-black text-[#9c3e54]">#{selectedOrderForComanda.orderNumber}</strong>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[9px] uppercase font-bold">Data / Horário:</span>
+                    <span className="font-semibold">{selectedOrderForComanda.createdAt}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[9px] uppercase font-bold">Entregador Designado:</span>
+                    <strong className="font-bold text-gray-900">{courierNameInput}</strong>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 block text-[9px] uppercase font-bold">Contato Motoboy:</span>
+                    <span className="font-semibold">{courierPhoneInput}</span>
+                  </div>
+                </div>
+
+                {/* Customer & Destination Info */}
+                <div className="py-3 border-b border-dashed border-gray-300 flex flex-col gap-1 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500 text-[9px] uppercase font-bold">Dados do Cliente:</span>
+                    <span className="font-bold text-gray-800">{selectedOrderForComanda.customerName}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500 text-[9px] uppercase font-bold">Telefone do Cliente:</span>
+                    <span className="font-bold text-[#9c3e54]">{selectedOrderForComanda.customerPhone || '(11) 98765-4321'}</span>
+                  </div>
+                  <div className="mt-2 p-2.5 bg-[#f8f3ee] rounded-xl border border-gray-200">
+                    <span className="text-[10px] font-bold uppercase text-gray-700 block mb-1">
+                      📍 Endereço de Entrega:
+                    </span>
+                    <p className="text-xs font-black text-gray-900 leading-tight">
+                      {selectedOrderForComanda.address.street}, {selectedOrderForComanda.address.number}
+                      {selectedOrderForComanda.address.complement ? ` - ${selectedOrderForComanda.address.complement}` : ''}
+                    </p>
+                    <p className="text-[11px] text-gray-700 mt-0.5">
+                      Bairro: {selectedOrderForComanda.address.neighborhood} • {selectedOrderForComanda.address.city}/{selectedOrderForComanda.address.state}
+                    </p>
+                    <p className="text-[10px] text-gray-600">CEP: {selectedOrderForComanda.address.postalCode}</p>
+                    {selectedOrderForComanda.address.referencePoint && (
+                      <p className="text-[11px] text-amber-900 font-bold mt-1 bg-amber-50 p-1 rounded border border-amber-200">
+                        🚩 Ponto de Referência: {selectedOrderForComanda.address.referencePoint}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Items to verify by courier */}
+                <div className="py-3 border-b border-dashed border-gray-300">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase font-bold text-gray-700">
+                      Itens do Pacote (Conferência):
+                    </span>
+                    <span className="text-[9px] text-gray-500">Conferido [ ✓ ]</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {selectedOrderForComanda.items.map((item, idx) => (
+                      <div key={idx} className="flex items-start justify-between gap-2 text-[11px]">
+                        <div className="flex items-start gap-1.5 min-w-0">
+                          <span className="w-4 h-4 rounded border border-gray-400 shrink-0 inline-block mt-0.5"></span>
+                          <div>
+                            <span className="font-bold text-gray-900">
+                              {item.quantity}x {item.name}
+                            </span>
+                            <span className="text-gray-500 text-[10px] block">
+                              {item.unitLabel}
+                            </span>
+                            {item.addons && item.addons.length > 0 && (
+                              <span className="text-[10px] text-[#9c3e54] block">
+                                + {item.addons.map(a => a.name).join(', ')}
+                              </span>
+                            )}
+                            {item.notes && (
+                              <span className="text-[10px] text-gray-600 italic block">
+                                Obs: {item.notes}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-semibold text-gray-800 shrink-0">
+                          R$ {item.itemTotal.toFixed(2).replace('.', ',')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedOrderForComanda.notes && (
+                    <div className="mt-2.5 p-2 bg-yellow-50 rounded-lg border border-yellow-200 text-[10px] text-yellow-900 font-sans">
+                      <strong>Observações do Pedido:</strong> {selectedOrderForComanda.notes}
+                    </div>
+                  )}
+                </div>
+
+                {/* Financial Summary & Payment Box */}
+                <div className="py-3 border-b-2 border-dashed border-gray-300">
+                  <div className="flex justify-between text-[11px] text-gray-700">
+                    <span>Subtotal:</span>
+                    <span>R$ {selectedOrderForComanda.subtotal.toFixed(2).replace('.', ',')}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-gray-700 mt-0.5">
+                    <span>Taxa de Entrega:</span>
+                    <span>R$ {selectedOrderForComanda.deliveryFee.toFixed(2).replace('.', ',')}</span>
+                  </div>
+                  {selectedOrderForComanda.discount > 0 && (
+                    <div className="flex justify-between text-[11px] text-emerald-700 mt-0.5">
+                      <span>Desconto Especial:</span>
+                      <span>- R$ {selectedOrderForComanda.discount.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-black text-gray-900 mt-1 pt-1 border-t border-gray-200">
+                    <span>VALOR TOTAL DO PEDIDO:</span>
+                    <span className="text-[#9c3e54]">
+                      R$ {selectedOrderForComanda.total.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+
+                  {/* Payment instruction for courier */}
+                  <div className="mt-3 p-3 rounded-xl border-2 text-center text-xs font-bold leading-tight font-sans">
+                    {selectedOrderForComanda.paymentStatus === 'approved' ? (
+                      <div className="bg-emerald-50 border-emerald-400 text-emerald-900 p-2 rounded-lg">
+                        <span className="block text-sm font-black uppercase text-emerald-700">
+                          ✅ PEDIDO JÁ PAGO ONLINE (PIX)
+                        </span>
+                        <span className="text-[11px] block mt-0.5">
+                          NÃO COBRAR NADA DO CLIENTE. APENAS ENTREGAR O PACOTE COM AFETO!
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 border-amber-400 text-amber-900 p-2.5 rounded-lg">
+                        <span className="block text-sm font-black uppercase text-amber-800">
+                          ⚠️ COBRAR NA ENTREGA: R$ {selectedOrderForComanda.total.toFixed(2).replace('.', ',')}
+                        </span>
+                        <span className="text-[11px] block mt-1 font-bold text-amber-900">
+                          {selectedOrderForComanda.paymentMethod === 'credit'
+                            ? '👉 LEVAR MAQUININHA FÍSICA • CARTÃO DE CRÉDITO'
+                            : selectedOrderForComanda.paymentMethod === 'debit'
+                            ? '👉 LEVAR MAQUININHA FÍSICA • CARTÃO DE DÉBITO'
+                            : '👉 COBRANÇA EM DINHEIRO FÍSICO'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Signature / Receipt Slip */}
+                <div className="pt-3 text-[10px] text-gray-500 flex flex-col gap-2">
+                  <div className="flex justify-between items-center pt-2">
+                    <span>Assinatura do Recebedor: ________________________</span>
+                    <span>Hora: ____:____</span>
+                  </div>
+                  <p className="text-center text-[9px] text-gray-400 mt-1 font-sans">
+                    Obrigado pela preferência! Confeitaria Artesanal Dolce Felicitá.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions Toolbar (no-print) */}
+            <div className="p-4 sm:p-5 border-t border-[#f2ede8] bg-[#fcf9f6] flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleCopyCourierComanda}
+                  className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-full bg-[#f2ede8] hover:bg-[#ece7e2] text-xs font-bold text-[#554245] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  title="Copiar texto formatado para área de transferência"
+                >
+                  {comandaCopiedFeedback ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  <span>{comandaCopiedFeedback ? 'Copiado!' : 'Copiar Texto'}</span>
+                </button>
+
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedOrderForComanda.address.street}, ${selectedOrderForComanda.address.number}, ${selectedOrderForComanda.address.neighborhood}, ${selectedOrderForComanda.address.city}`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                  <span>Ver no Maps</span>
+                </a>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleSendCourierWhatsApp}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  title="Enviar mensagem comanda para o WhatsApp do entregador"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Enviar p/ WhatsApp do Entregador</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintComanda}
+                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-full bg-[#9c3e54] hover:bg-[#64132b] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                  title="Imprimir comanda térmica para o entregador"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir Comanda</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 6: IN-APP CONFIRMATION MODAL (DELEÇÃO SEGURA SEM BROWSER ALERT)
+         ========================================================================= */}
+      {deleteModalState.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-[#dac0c3]/40 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-[#1d1b19] font-heading">
+                  {deleteModalState.title}
+                </h3>
+                <p className="text-xs text-[#7f5347]">
+                  Ação administrativa na confeitaria
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#554245] leading-relaxed bg-[#f8f3ee] p-3 rounded-xl border border-[#dac0c3]/30">
+              {deleteModalState.message}
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteModalState(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2.5 rounded-full bg-[#f2ede8] hover:bg-[#ece7e2] text-xs font-bold text-[#554245] transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Confirmar e Excluir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 7: EDITAR TELEFONE E DADOS DO ENTREGADOR (ADMINISTRADOR)
+         ========================================================================= */}
+      {courierEditModalOpen && selectedOrderForCourierEdit && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-[#dac0c3]/40 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-[#f2ede8] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#ffd9de] text-[#9c3e54] flex items-center justify-center shrink-0">
+                  <Phone className="w-5 h-5 text-[#9c3e54]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[#1d1b19] font-heading">
+                    Editar Telefone do Entregador
+                  </h3>
+                  <p className="text-xs text-[#7f5347]">
+                    Pedido #{selectedOrderForCourierEdit.orderNumber} • {selectedOrderForCourierEdit.customerName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCourierEditModalOpen(false)}
+                className="text-[#877274] hover:text-[#1d1b19] p-1 rounded-full cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCourierFromModal} className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-[#1d1b19]">Nome do Entregador (Motoboy)</label>
+                <input
+                  type="text"
+                  value={editingCourierName}
+                  onChange={e => setEditingCourierName(e.target.value)}
+                  required
+                  placeholder="Nome do entregador"
+                  className="w-full px-3.5 py-2 rounded-xl bg-[#f8f3ee] text-xs text-[#1d1b19] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-[#1d1b19]">WhatsApp / Telefone do Entregador</label>
+                <div className="relative flex items-center">
+                  <Phone className="w-4 h-4 text-[#7f5347] absolute left-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={editingCourierPhone}
+                    onChange={e => setEditingCourierPhone(e.target.value)}
+                    required
+                    placeholder="(11) 98765-4321"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#f8f3ee] text-xs text-[#1d1b19] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                  />
+                </div>
+                <p className="text-[10px] text-[#7f5347] mt-0.5">
+                  Este número será usado para envio direto da comanda de entrega via WhatsApp.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#f2ede8]">
+                <button
+                  type="button"
+                  onClick={() => setCourierEditModalOpen(false)}
+                  className="px-4 py-2.5 rounded-full bg-[#f2ede8] hover:bg-[#ece7e2] text-xs font-bold text-[#554245] transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-full bg-[#9c3e54] hover:bg-[#64132b] text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Salvar Telefone do Entregador</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Feedback Toast Notification */}
+      {feedbackToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#1d1b19] text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-in fade-in slide-in-from-bottom-4 border border-[#dac0c3]/30">
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{feedbackToast}</span>
         </div>
       )}
     </div>

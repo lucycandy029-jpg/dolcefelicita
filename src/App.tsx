@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { MenuScreen } from './components/MenuScreen';
 import { CheckoutScreen } from './components/CheckoutScreen';
@@ -6,6 +6,7 @@ import { OrderTrackingScreen } from './components/OrderTrackingScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { AdminPanel } from './components/AdminPanel';
 import { Footer } from './components/Footer';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { 
   INITIAL_CATEGORIES, 
   INITIAL_PRODUCTS, 
@@ -36,38 +37,93 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [addons, setAddons] = useState<ProductAddon[]>(INITIAL_GLOBAL_ADDONS);
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
-  const [activeAddress, setActiveAddress] = useState<Address>(DEFAULT_ADDRESS);
-  const [currentUser, setCurrentUser] = useState<User>(INITIAL_USER);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
 
-  // Initial cart with items matching the user's uploaded screen
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    {
-      id: 'cart-init-1',
-      productId: 'prod-cookie-nutella',
-      name: 'Cookie Tortinha de Nutella',
-      unitLabel: 'Unidade 130g',
-      unitPrice: 16.00,
-      quantity: 1,
-      imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCI9Q2Q983DUN78ApFjsf6giUl5bNQw43hicPMNuQdfluHfpxDWQnPMwyexvuvkGoMti9NDD_gC8YvkEi_VgvHyTi7gkcta7R7V7yNP-WFjTOBRBqSprkpCCh0amzAIONLS0SawvXJWEXo1-8vKn0rJ6MMVwtj29R7ugGXBHgyfNzUOH7PzIy5XagYcXz0XUN7Gpt4s1wfUfOpiRYJZGxAM9E2yyubWUWv_QpNYA_oOx9u0tGvSpYf9Iw',
-      badgeTag: 'Mais Amado',
-      addons: [{ id: 'a1', name: 'Calda extra de Nutella', price: 4.50 }],
-      itemTotal: 20.50
-    },
-    {
-      id: 'cart-init-2',
-      productId: 'prod-brownie-morango',
-      name: 'Brownie Supremo com Morangos',
-      unitLabel: 'Fatia Gourmet 180g',
-      unitPrice: 22.00,
-      quantity: 1,
-      imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBs1caCTh-nlqHXNCodqC0YrOJFbVT_rFjOiVqApJTV0LMyLR5nCHTNnesHoVQn6yovH4Gyg_0kXUgpSpmBkcWWLnoEn-RCF1TTZxUintBRTYi79e44NM9jJvqiIBC5vgGOg_UUrsXFCNEo5Q9QPVTWLWrG2n5v-g4njg382GNCP-bRShRpgNP8GiBGLg6DLtGhgj2_Kt78_w9GZh2Z5fTbOrLvg3zL89kLPn-Ui-q53AS_YH98XnWHIQ',
-      badgeTag: 'Cacau Belga 70%',
-      addons: [],
-      itemTotal: 22.00
-    }
-  ]);
+  // Persistent customers list linked to Admin Panel
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_customers_list');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_CUSTOMERS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('felicita_customers_list', JSON.stringify(customers));
+    } catch (e) {}
+  }, [customers]);
+
+  // Current logged in user (or guest). Never default to Mariana if not logged in.
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_current_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email) return parsed;
+      }
+    } catch (e) {}
+    return {
+      id: '',
+      name: 'Visitante',
+      email: '',
+      role: 'customer',
+      createdAt: ''
+    };
+  });
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_current_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Boolean(parsed && parsed.email);
+      }
+    } catch (e) {}
+    return false;
+  });
+
+  // Active delivery address: only present if user is logged in with address
+  const [activeAddress, setActiveAddress] = useState<Address | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('felicita_current_user');
+      if (savedUser) {
+        const parsedUser = JSON.parse(savedUser);
+        if (parsedUser && parsedUser.email) {
+          const savedAddr = localStorage.getItem('felicita_active_address');
+          if (savedAddr) return JSON.parse(savedAddr);
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  // Cart items - persisted in session
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    try {
+      const savedCart = localStorage.getItem('felicita_cart_items');
+      if (savedCart) return JSON.parse(savedCart);
+    } catch (e) {}
+    return [
+      {
+        id: 'cart-init-1',
+        productId: 'prod-cookie-nutella',
+        name: 'Cookie Tortinha de Nutella',
+        unitLabel: 'Unidade 130g',
+        unitPrice: 16.00,
+        quantity: 1,
+        imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCI9Q2Q983DUN78ApFjsf6giUl5bNQw43hicPMNuQdfluHfpxDWQnPMwyexvuvkGoMti9NDD_gC8YvkEi_VgvHyTi7gkcta7R7V7yNP-WFjTOBRBqSprkpCCh0amzAIONLS0SawvXJWEXo1-8vKn0rJ6MMVwtj29R7ugGXBHgyfNzUOH7PzIy5XagYcXz0XUN7Gpt4s1wfUfOpiRYJZGxAM9E2yyubWUWv_QpNYA_oOx9u0tGvSpYf9Iw',
+        badgeTag: 'Mais Amado',
+        addons: [{ id: 'a1', name: 'Calda extra de Nutella', price: 4.50 }],
+        itemTotal: 20.50
+      }
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('felicita_cart_items', JSON.stringify(cartItems));
+    } catch (e) {}
+  }, [cartItems]);
 
   // Active tracking order & order history
   const [activeOrder, setActiveOrder] = useState<Order>(INITIAL_ORDERS[0]);
@@ -134,9 +190,9 @@ export default function App() {
     const createdOrder: Order = {
       id: 'ord-' + newOrderNumber,
       orderNumber: newOrderNumber,
-      customerName: currentUser.name,
-      customerEmail: currentUser.email,
-      customerPhone: currentUser.phone,
+      customerName: currentUser.name && currentUser.name !== 'Visitante' ? currentUser.name : (orderData.customerName || 'Cliente Felicitá'),
+      customerEmail: currentUser.email || orderData.customerEmail || 'cliente@exemplo.com',
+      customerPhone: currentUser.phone || orderData.customerPhone || '(11) 99999-0000',
       status: 'preparing',
       items: orderData.items || cartItems,
       subtotal: orderData.subtotal || cartTotal,
@@ -145,7 +201,7 @@ export default function App() {
       total: orderData.total || (cartTotal + storeSettings.baseDeliveryFee - 7.25),
       paymentMethod: orderData.paymentMethod || 'pix',
       paymentStatus: 'approved',
-      address: orderData.address || activeAddress,
+      address: orderData.address || activeAddress || DEFAULT_ADDRESS,
       courier: {
         name: 'Mateus Siqueira',
         phone: '(11) 98765-4321',
@@ -159,6 +215,22 @@ export default function App() {
       createdAt: 'Hoje às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       updatedAt: 'Agora'
     };
+
+    // Update customer's order history metrics in customers list
+    if (currentUser.email) {
+      setCustomers(prev =>
+        prev.map(c => {
+          if (c.email.toLowerCase() === currentUser.email.toLowerCase()) {
+            return {
+              ...c,
+              ordersCount: (c.ordersCount || 0) + 1,
+              totalSpent: (c.totalSpent || 0) + createdOrder.total
+            };
+          }
+          return c;
+        })
+      );
+    }
 
     setActiveOrder(createdOrder);
     setCartItems([]); // Reset cart
@@ -188,7 +260,15 @@ export default function App() {
   const handleAddStockBatch = (productId: string, quantity: number) => {
     setProducts(prev =>
       prev.map(p =>
-        p.id === productId ? { ...p, stockAvailable: (p.stockAvailable || 0) + quantity } : p
+        p.id === productId ? { ...p, stockAvailable: Math.max(0, (p.stockAvailable || 0) + quantity) } : p
+      )
+    );
+  };
+
+  const handleSetProductStock = (productId: string, quantity: number) => {
+    setProducts(prev =>
+      prev.map(p =>
+        p.id === productId ? { ...p, stockAvailable: Math.max(0, quantity) } : p
       )
     );
   };
@@ -228,25 +308,119 @@ export default function App() {
     setAddons(prev => prev.filter(a => a.id !== addonId));
   };
 
+  const handleDeleteCustomer = (customerId: string) => {
+    setCustomers(prev => prev.filter(c => c.id !== customerId));
+  };
+
   const handleUpdateStoreSettings = (newSettings: StoreSettings) => {
     setStoreSettings(newSettings);
   };
 
   const handleLogout = () => {
-    setCurrentUser(INITIAL_USER);
-    if (currentTab === 'admin') {
-      setCurrentTab('cardapio');
-    }
+    setIsLoggedIn(false);
+    setCurrentUser({
+      id: '',
+      name: 'Visitante',
+      email: '',
+      role: 'customer',
+      createdAt: ''
+    });
+    setActiveAddress(null);
+    setCartItems([]);
+    try {
+      localStorage.removeItem('felicita_current_user');
+      localStorage.removeItem('felicita_active_address');
+      localStorage.removeItem('felicita_cart_items');
+    } catch (e) {}
+    setCurrentTab('auth');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLoginSuccess = (user: User) => {
+  const handleLoginSuccess = (user: User, newCustomerProfile?: Customer, newAddress?: Address) => {
     setCurrentUser(user);
     setIsLoggedIn(true);
+    try {
+      localStorage.setItem('felicita_current_user', JSON.stringify(user));
+    } catch (e) {}
+
+    // If new address was entered during registration or customer already had one, update active address
+    const resolvedAddress = newAddress || newCustomerProfile?.address || (customers.find(c => c.email.toLowerCase() === user.email.toLowerCase())?.address) || DEFAULT_ADDRESS;
+    setActiveAddress(resolvedAddress);
+    try {
+      localStorage.setItem('felicita_active_address', JSON.stringify(resolvedAddress));
+    } catch (e) {}
+
+    // Link login to customer profile and ensure new profile appears in the Admin Panel
+    if (user.role === 'customer' && user.email) {
+      setCustomers(prev => {
+        const existingIndex = prev.findIndex(c => c.email.toLowerCase() === user.email.toLowerCase());
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            name: user.name || updated[existingIndex].name,
+            phone: user.phone || updated[existingIndex].phone,
+            address: resolvedAddress || updated[existingIndex].address
+          };
+          return updated;
+        }
+
+        const newCust: Customer = newCustomerProfile || {
+          id: user.id || 'cust-' + Date.now(),
+          name: user.name || 'Novo Cliente',
+          email: user.email,
+          phone: user.phone || '(11) 99999-0000',
+          city: resolvedAddress ? `${resolvedAddress.neighborhood} • ${resolvedAddress.city}` : 'São Paulo - SP',
+          address: resolvedAddress,
+          ordersCount: 0,
+          totalSpent: 0,
+          isActive: true,
+          createdAt: new Date().toLocaleDateString('pt-BR')
+        };
+        return [newCust, ...prev];
+      });
+    }
+
     if (user.role === 'admin') {
       setCurrentTab('admin');
     } else {
       setCurrentTab('cardapio');
     }
+  };
+
+  const handleUpdateOrderCourier = (orderId: string, courierName: string, courierPhone: string) => {
+    const fallbackCourier = {
+      name: 'Mateus Siqueira',
+      phone: '(11) 98765-4321',
+      avatarUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC2aeNO3G5Kn1XPeuOcyvlHLub_aqlAu2cWxwqmm0uV5Bog5SJvE3zpIHrljrGVm6IGh6XSm019EftSfQTQYs3FFnErm0DIQ5HWMGmuujLpjQR5xKaq9r9UuNVYHMME_kf24d4Cn-QlcIB_9fxMRWmWXUAuDG28wR2pVugWRKgFERlggSLqgohN-bWmorJpS4d7R4Ftygy3ZxuLbVJXh-rWac7czDE_-PtIXp9sQAz-KodVf97EJSVx6w',
+      rating: 4.97,
+      deliveriesCount: 852
+    };
+
+    if (activeOrder.id === orderId) {
+      setActiveOrder(prev => ({
+        ...prev,
+        courier: {
+          ...(prev.courier || fallbackCourier),
+          name: courierName || prev.courier?.name || 'Mateus Siqueira',
+          phone: courierPhone
+        }
+      }));
+    }
+    setPastOrders(prev =>
+      prev.map(o =>
+        o.id === orderId
+          ? {
+              ...o,
+              courier: {
+                ...(o.courier || fallbackCourier),
+                name: courierName || o.courier?.name || 'Mateus Siqueira',
+                phone: courierPhone
+              }
+            }
+          : o
+      )
+    );
   };
 
   return (
@@ -273,7 +447,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="w-full pt-28 flex-1">
+      <main className="w-full pt-24 sm:pt-28 pb-20 lg:pb-8 flex-1">
         {(currentTab === 'cardapio' || currentTab === 'mais-pedidos' || currentTab === 'combos') && (
           <MenuScreen
             categories={categories}
@@ -291,7 +465,12 @@ export default function App() {
             onNavigateToMenu={() => setCurrentTab('cardapio')}
             onConfirmOrder={handleConfirmOrder}
             activeAddress={activeAddress}
-            onUpdateAddress={setActiveAddress}
+            onUpdateAddress={addr => {
+              setActiveAddress(addr);
+              try {
+                localStorage.setItem('felicita_active_address', JSON.stringify(addr));
+              } catch (e) {}
+            }}
           />
         )}
 
@@ -306,6 +485,7 @@ export default function App() {
 
         {currentTab === 'auth' && (
           <AuthScreen
+            customers={customers}
             onLoginSuccess={handleLoginSuccess}
             onContinueAsGuest={() => setCurrentTab('cardapio')}
           />
@@ -329,7 +509,11 @@ export default function App() {
               onDeleteCategory={handleDeleteCategory}
               onAddAddon={handleAddAddon}
               onDeleteAddon={handleDeleteAddon}
+              onDeleteCustomer={handleDeleteCustomer}
+              onSetProductStock={handleSetProductStock}
               onUpdateStoreSettings={handleUpdateStoreSettings}
+              onUpdateOrderCourier={handleUpdateOrderCourier}
+              onLogout={handleLogout}
             />
           ) : (
             <div className="max-w-xl mx-auto px-4 py-16 text-center">
@@ -365,7 +549,7 @@ export default function App() {
 
       {/* Floating Quick Cart Notification Widget (on Cardapio screen) */}
       {(currentTab === 'cardapio' || currentTab === 'mais-pedidos') && cartCount > 0 && (
-        <aside className="fixed bottom-6 right-6 z-40 max-w-sm w-[calc(100%-3rem)] bg-white/95 backdrop-blur-xl p-3.5 rounded-2xl shadow-[0_12px_36px_rgba(61,28,18,0.18)] flex items-center justify-between gap-3 border border-[#dac0c3]/40 transition-transform duration-300">
+        <aside className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-40 max-w-sm w-[calc(100%-2rem)] sm:w-[calc(100%-3rem)] bg-white/95 backdrop-blur-xl p-3.5 rounded-2xl shadow-[0_12px_36px_rgba(61,28,18,0.18)] flex items-center justify-between gap-3 border border-[#dac0c3]/40 transition-transform duration-300">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative w-11 h-11 rounded-full bg-[#ffd9de] flex items-center justify-center text-[#9c3e54] shrink-0 shadow-sm">
               <ShoppingBag className="w-5 h-5" />
@@ -394,6 +578,22 @@ export default function App() {
           </button>
         </aside>
       )}
+
+      {/* Mobile Bottom Navigation Bar */}
+      <MobileBottomNav
+        currentTab={currentTab}
+        onNavigate={tab => {
+          if (tab === 'admin' && currentUser.role !== 'admin') {
+            setCurrentTab('auth');
+          } else {
+            setCurrentTab(tab);
+          }
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        cartCount={cartCount}
+        isLoggedIn={isLoggedIn}
+        userRole={currentUser.role}
+      />
 
       {/* Global Footer */}
       <Footer />

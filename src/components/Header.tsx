@@ -8,7 +8,7 @@ interface HeaderProps {
   onNavigate: (tab: string) => void;
   cartCount: number;
   cartTotal: number;
-  activeAddress: Address;
+  activeAddress?: Address | null;
   isLoggedIn: boolean;
   userName: string;
   userRole: string;
@@ -62,20 +62,22 @@ export const Header: React.FC<HeaderProps> = ({
             <BrandLogo variant="compact" />
           </button>
 
-          {/* Delivery location selector */}
-          <button
-            onClick={() => onNavigate('carrinho')}
-            className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#f2ede8] hover:bg-[#ece7e2] transition-colors text-left border border-[#dac0c3]/40 cursor-pointer"
-          >
-            <MapPin className="w-4 h-4 text-[#9c3e54] shrink-0" />
-            <div className="flex flex-col leading-tight">
-              <span className="text-[10px] uppercase text-[#7f5347] font-semibold tracking-wider">Entregar em</span>
-              <span className="text-xs font-semibold text-[#1d1b19] truncate max-w-[170px]">
-                {activeAddress.street}, {activeAddress.number}
-              </span>
-            </div>
-            <ChevronDown className="w-3.5 h-3.5 text-[#877274]" />
-          </button>
+          {/* Delivery location selector - só aparece quando o usuário estiver logado e tiver endereço */}
+          {isLoggedIn && activeAddress && activeAddress.street ? (
+            <button
+              onClick={() => onNavigate('carrinho')}
+              className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#f2ede8] hover:bg-[#ece7e2] transition-colors text-left border border-[#dac0c3]/40 cursor-pointer animate-fadeIn"
+            >
+              <MapPin className="w-4 h-4 text-[#9c3e54] shrink-0" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-[10px] uppercase text-[#7f5347] font-semibold tracking-wider">Entregar em</span>
+                <span className="text-xs font-semibold text-[#1d1b19] truncate max-w-[170px]">
+                  {activeAddress.street}, {activeAddress.number}
+                </span>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-[#877274]" />
+            </button>
+          ) : null}
         </div>
 
         {/* Navigation Tabs */}
