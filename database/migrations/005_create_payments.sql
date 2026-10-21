@@ -28,7 +28,7 @@ ON CONFLICT (id) DO NOTHING;
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE RESTRICT,
+    order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     payment_method_id VARCHAR(30) NOT NULL REFERENCES payment_methods(id),
     amount NUMERIC(10, 2) NOT NULL CHECK (amount > 0),
     status VARCHAR(30) NOT NULL DEFAULT 'pending', -- pending, approved, rejected, refunded

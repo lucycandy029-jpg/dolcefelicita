@@ -44,10 +44,65 @@ export default function App() {
     } catch (e) {}
     return 'auth';
   });
-  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [addons, setAddons] = useState<ProductAddon[]>(INITIAL_GLOBAL_ADDONS);
-  const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+  // Categories - persisted in localStorage
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_categories_list');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_CATEGORIES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('felicita_categories_list', JSON.stringify(categories));
+    } catch (e) {}
+  }, [categories]);
+
+  // Products - persisted in localStorage (deleted items stay deleted on reload)
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_products_list');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_PRODUCTS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('felicita_products_list', JSON.stringify(products));
+    } catch (e) {}
+  }, [products]);
+
+  // Addons - persisted in localStorage
+  const [addons, setAddons] = useState<ProductAddon[]>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_addons_list');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_GLOBAL_ADDONS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('felicita_addons_list', JSON.stringify(addons));
+    } catch (e) {}
+  }, [addons]);
+
+  // Store Settings - persisted in localStorage
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_store_settings');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_STORE_SETTINGS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('felicita_store_settings', JSON.stringify(storeSettings));
+    } catch (e) {}
+  }, [storeSettings]);
 
   // Persistent customers list linked to Admin Panel
   const [customers, setCustomers] = useState<Customer[]>(() => {

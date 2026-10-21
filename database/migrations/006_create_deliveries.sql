@@ -34,7 +34,7 @@ VALUES (
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS deliveries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id UUID NOT NULL UNIQUE REFERENCES orders(id) ON DELETE RESTRICT,
+    order_id UUID NOT NULL UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
     courier_id UUID REFERENCES couriers(id) ON DELETE SET NULL,
     
     -- Snapshot estático imutável do endereço no momento do pedido
