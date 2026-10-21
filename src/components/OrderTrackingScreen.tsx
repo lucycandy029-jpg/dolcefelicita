@@ -13,7 +13,7 @@ import {
 import { Order } from '../types';
 
 interface OrderTrackingScreenProps {
-  order: Order;
+  order?: Order | null;
   pastOrders: Order[];
   onNavigateToMenu: () => void;
   onReorder: (order: Order) => void;
@@ -26,6 +26,30 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
   onReorder
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'canceled'>('active');
+
+  if (!order) {
+    return (
+      <div className="w-full max-w-2xl mx-auto px-4 py-16 text-center">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-[#dac0c3]/40 flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-[#ffd9de] text-[#9c3e54] flex items-center justify-center">
+            <Clock className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-[#1d1b19] font-heading">
+            Nenhum pedido ativo no momento
+          </h2>
+          <p className="text-xs text-[#554245] max-w-md">
+            Você não possui nenhum pedido em andamento no momento. Navegue pelo nosso cardápio artesanal para escolher seus doces favoritos!
+          </p>
+          <button
+            onClick={onNavigateToMenu}
+            className="mt-2 px-6 py-2.5 rounded-full bg-[#9c3e54] text-white text-xs font-bold hover:bg-[#64132b] shadow-sm transition-all cursor-pointer"
+          >
+            Ver Cardápio Artesanal
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full pb-16">

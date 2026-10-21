@@ -31,7 +31,8 @@ import {
   LogOut,
   Navigation,
   MapPin,
-  Phone
+  Phone,
+  RotateCcw
 } from 'lucide-react';
 import { Order, Product, OrderStatus, Category, ProductAddon, StoreSettings, Customer } from '../types';
 
@@ -51,6 +52,11 @@ interface AdminPanelProps {
   onAddAddon: (addon: ProductAddon) => void;
   onDeleteAddon: (addonId: string) => void;
   onDeleteCustomer?: (customerId: string) => void;
+  onDeleteOrder?: (orderId: string) => void;
+  onClearAllOrders?: () => void;
+  onResetRevenue?: () => void;
+  onRestoreRevenue?: () => void;
+  isRevenueReset?: boolean;
   onSetProductStock?: (productId: string, quantity: number) => void;
   onUpdateStoreSettings: (settings: StoreSettings) => void;
   onUpdateOrderCourier?: (orderId: string, courierName: string, courierPhone: string) => void;
@@ -73,6 +79,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onAddAddon,
   onDeleteAddon,
   onDeleteCustomer,
+  onDeleteOrder,
+  onClearAllOrders,
+  onResetRevenue,
+  onRestoreRevenue,
+  isRevenueReset = false,
   onSetProductStock,
   onUpdateStoreSettings,
   onUpdateOrderCourier,
@@ -87,7 +98,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     isOpen: boolean;
     title: string;
     message: string;
-    itemType: 'product' | 'addon' | 'category' | 'customer' | 'stock_zero' | 'stock_delete';
+    itemType: 'product' | 'addon' | 'category' | 'customer' | 'stock_zero' | 'stock_delete' | 'order' | 'all_orders' | 'reset_revenue';
     itemId: string;
     itemName: string;
   }>({
@@ -170,7 +181,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     { value: 'cancelled', label: 'Cancelado', color: 'bg-rose-100 text-rose-800' }
   ];
 
-  const totalSalesToday = orders.reduce((acc, o) => acc + o.total, 0) + 1240.00;
+  // Dynamic Real Revenue calculation
+  const totalSalesCalculated = orders
+    .filter(o => o.status !== 'cancelled')
+    .reduce((acc, o) => acc + o.total, 0);
+
+  const totalSalesToday = isRevenueReset ? 0.00 : totalSalesCalculated;
+
+  const pixSales = isRevenueReset
+    ? 0.00
+    : orders
+        .filter(o => o.paymentMethod === 'pix' && o.status !== 'cancelled')
+        .reduce((acc, o) => acc + o.total, 0);
+
+  const creditSales = isRevenueReset
+    ? 0.00
+    : orders
+        .filter(o => o.paymentMethod === 'credit' && o.status !== 'cancelled')
+        .reduce((acc, o) => acc + o.total, 0);
+
+  const debitAndCashSales = isRevenueReset
+    ? 0.00
+    : orders
+        .filter(o => (o.paymentMethod === 'debit' || o.paymentMethod === 'cash') && o.status !== 'cancelled')
+        .reduce((acc, o) => acc + o.total, 0);
+
+  const paidOrdersCount = isRevenueReset
+    ? 0
+    : orders.filter(o => o.status !== 'cancelled').length;
+
+  const averageTicket = paidOrdersCount > 0 ? totalSalesToday / paidOrdersCount : 0.00;
   const activeOrdersCount = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length;
 
   // Handle Image Upload from User's Device
@@ -190,7 +230,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProductName.trim()) {
-      alert('Por favor informe o nome do doce.');
+      showToast('Por favor informe o nome do doce.');
       return;
     }
 
@@ -431,7 +471,7 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
 
   // In-App Deletion handlers (Reliable, no browser alert/confirm dependency)
   const requestDelete = (
-    itemType: 'product' | 'addon' | 'category' | 'customer' | 'stock_zero' | 'stock_delete',
+    itemType: 'product' | 'addon' | 'category' | 'customer' | 'stock_zero' | 'stock_delete' | 'order' | 'all_orders' | 'reset_revenue',
     itemId: string,
     itemName: string
   ) => {
@@ -456,6 +496,15 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
     } else if (itemType === 'stock_delete') {
       title = 'Excluir Item do Estoque';
       message = `Tem certeza que deseja excluir definitivamente "${itemName}" do estoque e do catálogo?`;
+    } else if (itemType === 'order') {
+      title = 'Excluir Pedido';
+      message = `Tem certeza que deseja excluir o Pedido ${itemName}? Esta ação removerá o pedido permanentemente do painel e do histórico.`;
+    } else if (itemType === 'all_orders') {
+      title = 'Excluir Todos os Pedidos';
+      message = 'Atenção: Tem certeza que deseja excluir TODOS os pedidos registrados no sistema? Esta ação é definitiva e esvaziará a lista de pedidos.';
+    } else if (itemType === 'reset_revenue') {
+      title = 'Zerar Faturamento da Loja';
+      message = 'Tem certeza que deseja zerar o faturamento registrado? O total acumulado de vendas será reiniciado para R$ 0,00.';
     }
 
     setDeleteModalState({
@@ -492,6 +541,21 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
         if (prod) onAddStockBatch(itemId, -(prod.stockAvailable || 0));
       }
       showToast(`Estoque de "${itemName}" foi zerado com sucesso!`);
+    } else if (itemType === 'order') {
+      if (onDeleteOrder) {
+        onDeleteOrder(itemId);
+        showToast(`Pedido ${itemName} foi excluído com sucesso!`);
+      }
+    } else if (itemType === 'all_orders') {
+      if (onClearAllOrders) {
+        onClearAllOrders();
+        showToast('Todos os pedidos foram excluídos com sucesso!');
+      }
+    } else if (itemType === 'reset_revenue') {
+      if (onResetRevenue) {
+        onResetRevenue();
+        showToast('Faturamento zerado com sucesso! Saldo reiniciado para R$ 0,00.');
+      }
     }
 
     setDeleteModalState(prev => ({ ...prev, isOpen: false }));
@@ -618,7 +682,7 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-[#dac0c3]/30 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#7f5347] font-bold uppercase tracking-wider">Faturamento Hoje</span>
+            <span className="text-xs text-[#7f5347] font-bold uppercase tracking-wider">Faturamento</span>
             <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
               <DollarSign className="w-4 h-4" />
             </div>
@@ -627,9 +691,32 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
             <div className="text-2xl font-black text-[#1d1b19]">
               R$ {totalSalesToday.toFixed(2).replace('.', ',')}
             </div>
-            <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-0.5 mt-0.5">
-              <ArrowUpRight className="w-3.5 h-3.5" /> +18.4% vs ontem
-            </span>
+            <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#dac0c3]/20">
+              <span className="text-[11px] text-[#554245]">
+                {isRevenueReset ? 'Saldo zerado (R$ 0,00)' : `${paidOrdersCount} pedidos faturados`}
+              </span>
+              {isRevenueReset && onRestoreRevenue ? (
+                <button
+                  type="button"
+                  onClick={onRestoreRevenue}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Restaurar faturamento original baseado nos pedidos"
+                >
+                  <RotateCcw className="w-3 h-3 text-emerald-600" />
+                  <span>Restaurar</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => requestDelete('reset_revenue', 'revenue', 'Faturamento')}
+                  className="text-[11px] font-bold text-rose-700 hover:text-rose-900 hover:underline flex items-center gap-1 cursor-pointer"
+                  title="Zerar faturamento da loja"
+                >
+                  <Trash2 className="w-3 h-3 text-rose-600" />
+                  <span>Zerar</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -692,136 +779,177 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                 Gestão de Pedidos & Rastreio de Entregas
               </h2>
               <p className="text-xs text-[#554245]">
-                Altere status e envie mensagens automáticas de aviso para o WhatsApp do cliente com 1 clique.
+                Altere status, envie avisos no WhatsApp, imprima comandas e gerencie os pedidos recebidos.
               </p>
             </div>
-            <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full font-bold flex items-center gap-1.5 w-fit">
-              <MessageCircle className="w-4 h-4 text-emerald-600" />
-              Notificações WhatsApp Ativas
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {orders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => requestDelete('all_orders', 'all', 'todos os pedidos')}
+                  className="px-3.5 py-1.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="Excluir todos os pedidos registrados"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Excluir Todos os Pedidos</span>
+                </button>
+              )}
+              <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full font-bold flex items-center gap-1.5 w-fit">
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                Notificações WhatsApp Ativas
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-col gap-4">
-            {orders.map(orderItem => (
-              <div
-                key={orderItem.id}
-                className="p-5 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-[#9c3e54] shrink-0 font-bold text-sm border border-[#dac0c3]/30">
-                    #{orderItem.orderNumber}
+            {orders.length === 0 ? (
+              <div className="p-10 rounded-2xl bg-[#f8f3ee] border border-dashed border-[#dac0c3] text-center flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-[#ffd9de] text-[#9c3e54] flex items-center justify-center">
+                  <Package className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-bold text-[#1d1b19]">Nenhum pedido registrado no momento</p>
+                <p className="text-xs text-[#7f5347] max-w-sm">
+                  Todos os pedidos foram excluídos ou ainda não foram realizados novos pedidos.
+                </p>
+              </div>
+            ) : (
+              orders.map(orderItem => (
+                <div
+                  key={orderItem.id}
+                  className="p-5 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-[#9c3e54] shrink-0 font-bold text-sm border border-[#dac0c3]/30">
+                      #{orderItem.orderNumber}
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-[#1d1b19] font-heading">
+                          {orderItem.customerName}
+                        </span>
+                        <span className="text-xs text-[#7f5347] font-semibold">
+                          • {orderItem.customerPhone || '(11) 98765-4321'}
+                        </span>
+                        <span className="text-xs text-[#877274]">
+                          • {orderItem.createdAt}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-[#554245] mt-1">
+                        {orderItem.items.map(i => `${i.quantity}x ${i.name}`).join(' • ')}
+                      </p>
+
+                      <div className="flex items-center gap-3 mt-1.5 text-xs flex-wrap">
+                        <span className="font-bold text-[#9c3e54]">
+                          Total: R$ {orderItem.total.toFixed(2).replace('.', ',')}
+                        </span>
+                        <span className="text-[#7f5347]">
+                          Entrega: {orderItem.address.street}, {orderItem.address.number} ({orderItem.address.neighborhood})
+                        </span>
+                        <span className="text-[11px] bg-white px-2.5 py-0.5 rounded-full border border-[#dac0c3]/40 font-semibold text-[#1d1b19]">
+                          {orderItem.paymentMethod === 'pix'
+                            ? 'PIX (Online Pago)'
+                            : orderItem.paymentMethod === 'credit'
+                            ? 'Crédito (Maquininha na Entrega)'
+                            : orderItem.paymentMethod === 'debit'
+                            ? 'Débito (Maquininha na Entrega)'
+                            : 'Dinheiro na Entrega'}
+                        </span>
+                      </div>
+
+                      {/* Entregador designado e Telefone editável */}
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#dac0c3]/20 flex-wrap text-xs">
+                        <span className="text-[11px] font-bold text-[#7f5347] flex items-center gap-1">
+                          <Navigation className="w-3.5 h-3.5 text-[#9c3e54]" />
+                          Entregador:
+                        </span>
+                        <strong className="text-[#1d1b19]">
+                          {orderItem.courier?.name || 'Mateus Siqueira'}
+                        </strong>
+                        <span className="text-[#554245] flex items-center gap-1">
+                          • WhatsApp/Tel: <strong>{orderItem.courier?.phone || '(11) 98765-4321'}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openCourierEditModal(orderItem)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffd9de]/50 border border-[#dac0c3]/50 text-[11px] font-bold text-[#9c3e54] transition-all cursor-pointer shadow-xs ml-auto"
+                          title="Editar nome e telefone do entregador deste pedido"
+                        >
+                          <Phone className="w-3 h-3 text-[#9c3e54]" />
+                          <span>Editar Telefone</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-[#1d1b19] font-heading">
-                        {orderItem.customerName}
-                      </span>
-                      <span className="text-xs text-[#7f5347] font-semibold">
-                        • {orderItem.customerPhone || '(11) 98765-4321'}
-                      </span>
-                      <span className="text-xs text-[#877274]">
-                        • {orderItem.createdAt}
-                      </span>
+
+                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                    {/* Status Dropdown */}
+                    <div className="flex flex-col">
+                      <label className="text-[10px] text-[#7f5347] uppercase font-bold mb-1">
+                        Alterar Status:
+                      </label>
+                      <select
+                        value={orderItem.status}
+                        onChange={e => onUpdateOrderStatus(orderItem.id, e.target.value as OrderStatus)}
+                        className="px-3 py-1.5 rounded-full bg-white text-xs font-bold text-[#1d1b19] border border-[#dac0c3] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#9c3e54] cursor-pointer"
+                      >
+                        {statusOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
-                    <p className="text-xs text-[#554245] mt-1">
-                      {orderItem.items.map(i => `${i.quantity}x ${i.name}`).join(' • ')}
-                    </p>
-
-                    <div className="flex items-center gap-3 mt-1.5 text-xs flex-wrap">
-                      <span className="font-bold text-[#9c3e54]">
-                        Total: R$ {orderItem.total.toFixed(2).replace('.', ',')}
-                      </span>
-                      <span className="text-[#7f5347]">
-                        Entrega: {orderItem.address.street}, {orderItem.address.number} ({orderItem.address.neighborhood})
-                      </span>
-                      <span className="text-[11px] bg-white px-2.5 py-0.5 rounded-full border border-[#dac0c3]/40 font-semibold text-[#1d1b19]">
-                        {orderItem.paymentMethod === 'pix'
-                          ? 'PIX (Online Pago)'
-                          : orderItem.paymentMethod === 'credit'
-                          ? 'Crédito (Maquininha na Entrega)'
-                          : orderItem.paymentMethod === 'debit'
-                          ? 'Débito (Maquininha na Entrega)'
-                          : 'Dinheiro na Entrega'}
-                      </span>
+                    {/* WhatsApp Notify Button */}
+                    <div className="flex flex-col">
+                      <label className="text-[10px] text-[#7f5347] uppercase font-bold mb-1">
+                        Aviso ao Cliente:
+                      </label>
+                      <button
+                        onClick={() => openWhatsAppModal(orderItem)}
+                        className="px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                        title="Enviar status no WhatsApp do cliente"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>Notificar WhatsApp</span>
+                      </button>
                     </div>
 
-                    {/* Entregador designado e Telefone editável */}
-                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[#dac0c3]/20 flex-wrap text-xs">
-                      <span className="text-[11px] font-bold text-[#7f5347] flex items-center gap-1">
-                        <Navigation className="w-3.5 h-3.5 text-[#9c3e54]" />
-                        Entregador:
-                      </span>
-                      <strong className="text-[#1d1b19]">
-                        {orderItem.courier?.name || 'Mateus Siqueira'}
-                      </strong>
-                      <span className="text-[#554245] flex items-center gap-1">
-                        • WhatsApp/Tel: <strong>{orderItem.courier?.phone || '(11) 98765-4321'}</strong>
-                      </span>
+                    {/* Comanda do Entregador Button */}
+                    <div className="flex flex-col">
+                      <label className="text-[10px] text-[#7f5347] uppercase font-bold mb-1">
+                        Para o Entregador:
+                      </label>
+                      <button
+                        onClick={() => openComandaModal(orderItem)}
+                        className="px-3.5 py-1.5 rounded-full bg-[#311309] hover:bg-[#1d1b19] text-[#ffd9de] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer ring-1 ring-[#ffd9de]/30"
+                        title="Abrir comanda para imprimir ou enviar no WhatsApp do entregador"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-[#ffd9de]" />
+                        <span>Comanda Entregador</span>
+                      </button>
+                    </div>
+
+                    {/* Excluir Pedido Button */}
+                    <div className="flex flex-col">
+                      <label className="text-[10px] text-rose-700 uppercase font-bold mb-1">
+                        Ação:
+                      </label>
                       <button
                         type="button"
-                        onClick={() => openCourierEditModal(orderItem)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#ffd9de]/50 border border-[#dac0c3]/50 text-[11px] font-bold text-[#9c3e54] transition-all cursor-pointer shadow-xs ml-auto"
-                        title="Editar nome e telefone do entregador deste pedido"
+                        onClick={() => requestDelete('order', orderItem.id, `#${orderItem.orderNumber}`)}
+                        className="px-3 py-1.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                        title="Excluir este pedido definitivamente"
                       >
-                        <Phone className="w-3 h-3 text-[#9c3e54]" />
-                        <span>Editar Telefone</span>
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Excluir</span>
                       </button>
                     </div>
                   </div>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
-                  {/* Status Dropdown */}
-                  <div className="flex flex-col">
-                    <label className="text-[10px] text-[#7f5347] uppercase font-bold mb-1">
-                      Alterar Status:
-                    </label>
-                    <select
-                      value={orderItem.status}
-                      onChange={e => onUpdateOrderStatus(orderItem.id, e.target.value as OrderStatus)}
-                      className="px-3 py-1.5 rounded-full bg-white text-xs font-bold text-[#1d1b19] border border-[#dac0c3] shadow-sm focus:outline-none focus:ring-1 focus:ring-[#9c3e54] cursor-pointer"
-                    >
-                      {statusOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* WhatsApp Notify Button */}
-                  <div className="flex flex-col">
-                    <label className="text-[10px] text-[#7f5347] uppercase font-bold mb-1">
-                      Aviso ao Cliente:
-                    </label>
-                    <button
-                      onClick={() => openWhatsAppModal(orderItem)}
-                      className="px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                      title="Enviar status no WhatsApp do cliente"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>Notificar WhatsApp</span>
-                    </button>
-                  </div>
-
-                  {/* Comanda do Entregador Button */}
-                  <div className="flex flex-col">
-                    <label className="text-[10px] text-[#7f5347] uppercase font-bold mb-1">
-                      Para o Entregador:
-                    </label>
-                    <button
-                      onClick={() => openComandaModal(orderItem)}
-                      className="px-3.5 py-1.5 rounded-full bg-[#311309] hover:bg-[#1d1b19] text-[#ffd9de] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer ring-1 ring-[#ffd9de]/30"
-                      title="Abrir comanda para imprimir ou enviar no WhatsApp do entregador"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-[#ffd9de]" />
-                      <span>Comanda Entregador</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
@@ -1366,7 +1494,7 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
             <button
               onClick={() => {
                 onAddStockBatch(selectedProductForBatch, batchQuantity);
-                alert(`Fornada de +${batchQuantity} unidades registrada com sucesso!`);
+                showToast(`Fornada de +${batchQuantity} unidades registrada com sucesso!`);
               }}
               className="w-full mt-2 py-2.5 px-4 rounded-full bg-[#9c3e54] text-white text-xs font-bold hover:bg-[#64132b] shadow-sm transition-all cursor-pointer"
             >
@@ -1381,30 +1509,81 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
          ========================================================================= */}
       {activeAdminTab === 'finances' && (
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#dac0c3]/30 flex flex-col gap-6">
-          <div>
-            <h2 className="text-lg font-bold text-[#1d1b19] font-heading">
-              Relatório Financeiro & Métodos de Pagamento
-            </h2>
-            <p className="text-xs text-[#554245]">
-              Diferenciação clara entre valores faturados e recebidos instantaneamente (PIX / Cartões).
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-[#1d1b19] font-heading">
+                Relatório Financeiro & Métodos de Pagamento
+              </h2>
+              <p className="text-xs text-[#554245]">
+                Diferenciação clara entre valores faturados e recebidos instantaneamente (PIX / Cartões / Dinheiro).
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {isRevenueReset && onRestoreRevenue && (
+                <button
+                  type="button"
+                  onClick={onRestoreRevenue}
+                  className="px-3.5 py-2 rounded-full bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-bold border border-emerald-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Restaurar faturamento original baseado nos pedidos atuais"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Restaurar Vendas</span>
+                </button>
+              )}
+              {onResetRevenue && (
+                <button
+                  type="button"
+                  onClick={() => requestDelete('reset_revenue', 'revenue', 'Faturamento da Loja')}
+                  className="px-4 py-2 rounded-full bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-bold border border-rose-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Zerar o faturamento da loja para R$ 0,00"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Zerar Faturamento (R$ 0,00)</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {isRevenueReset && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 flex items-center gap-2.5 text-xs text-amber-900 font-medium">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+              <span>O faturamento da loja foi zerado manualmente para R$ 0,00 pelo administrador. Você pode restaurar o valor calculado a qualquer momento.</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-[#ffd9de]/30 border border-[#dac0c3]/40">
+              <span className="text-[10px] uppercase font-bold text-[#7f5347]">Faturamento Total</span>
+              <div className="text-2xl font-bold text-[#9c3e54] mt-1">
+                R$ {totalSalesToday.toFixed(2).replace('.', ',')}
+              </div>
+              <span className="text-[11px] text-[#554245]">
+                {paidOrdersCount} {paidOrdersCount === 1 ? 'pedido faturado' : 'pedidos faturados'}
+              </span>
+            </div>
+
             <div className="p-4 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30">
-              <span className="text-[10px] uppercase font-bold text-[#7f5347]">PIX Instantâneo (68%)</span>
-              <div className="text-xl font-bold text-[#9c3e54] mt-1">R$ 1.250,00</div>
+              <span className="text-[10px] uppercase font-bold text-[#7f5347]">Ticket Médio</span>
+              <div className="text-2xl font-bold text-[#1d1b19] mt-1">
+                R$ {averageTicket.toFixed(2).replace('.', ',')}
+              </div>
+              <span className="text-[11px] text-[#7f5347]">Por pedido concluído</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30">
+              <span className="text-[10px] uppercase font-bold text-[#7f5347]">PIX Instantâneo</span>
+              <div className="text-2xl font-bold text-emerald-700 mt-1">
+                R$ {pixSales.toFixed(2).replace('.', ',')}
+              </div>
               <span className="text-[11px] text-emerald-600 font-semibold">100% Liquidado em conta</span>
             </div>
+
             <div className="p-4 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30">
-              <span className="text-[10px] uppercase font-bold text-[#7f5347]">Cartão de Crédito (26%)</span>
-              <div className="text-xl font-bold text-[#1d1b19] mt-1">R$ 480,00</div>
-              <span className="text-[11px] text-blue-600 font-semibold">Recebimento D+1 Gateway</span>
-            </div>
-            <div className="p-4 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30">
-              <span className="text-[10px] uppercase font-bold text-[#7f5347]">Débito / Dinheiro (6%)</span>
-              <div className="text-xl font-bold text-[#1d1b19] mt-1">R$ 110,00</div>
-              <span className="text-[11px] text-[#554245]">Na entrega com motoboy</span>
+              <span className="text-[10px] uppercase font-bold text-[#7f5347]">Cartão Crédito / Débito / Dinheiro</span>
+              <div className="text-2xl font-bold text-[#1d1b19] mt-1">
+                R$ {(creditSales + debitAndCashSales).toFixed(2).replace('.', ',')}
+              </div>
+              <span className="text-[11px] text-[#554245]">Maquininha física / entrega</span>
             </div>
           </div>
         </div>
@@ -2127,8 +2306,17 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                 onClick={handleConfirmDelete}
                 className="px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" />
-                <span>Confirmar e Excluir</span>
+                {deleteModalState.itemType === 'reset_revenue' ? (
+                  <>
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Confirmar e Zerar Faturamento</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Confirmar e Excluir</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

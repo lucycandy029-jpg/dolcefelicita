@@ -25,7 +25,7 @@ import { BrandLogo } from './BrandLogo';
 interface AuthScreenProps {
   customers: Customer[];
   onLoginSuccess: (user: User, newCustomerProfile?: Customer, newAddress?: Address) => void;
-  onContinueAsGuest: () => void;
+  onContinueAsGuest?: () => void;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
@@ -819,15 +819,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </button>
             </div>
 
-            <div className="text-center mt-4">
-              <button
-                onClick={onContinueAsGuest}
-                className="inline-flex items-center gap-1.5 text-xs text-[#7f5347] hover:text-[#1d1b19] font-semibold py-1 px-3 rounded-full hover:bg-[#f8f3ee] transition-colors cursor-pointer"
-              >
-                <Store className="w-3.5 h-3.5" />
-                <span>Continuar navegando sem login</span>
-              </button>
-            </div>
+            {onContinueAsGuest && (
+              <div className="text-center mt-4">
+                <button
+                  type="button"
+                  onClick={onContinueAsGuest}
+                  className="inline-flex items-center gap-1.5 text-xs text-[#7f5347] hover:text-[#1d1b19] font-semibold py-1 px-3 rounded-full hover:bg-[#f8f3ee] transition-colors cursor-pointer"
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  <span>Continuar navegando sem login</span>
+                </button>
+              </div>
+            )}
 
             <div className="mt-5 pt-4 bg-[#fcf9f6] -mx-7 -mb-7 sm:-mx-9 sm:-mb-9 px-6 py-4 rounded-b-3xl border-t border-[#f2ede8] flex flex-col items-center gap-1 text-center">
               <p className="text-xs text-[#554245]">

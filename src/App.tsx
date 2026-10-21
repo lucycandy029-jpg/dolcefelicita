@@ -32,7 +32,18 @@ import {
 import { ShoppingBag, ArrowRight } from 'lucide-react';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<string>('cardapio');
+  const [currentTab, setCurrentTab] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_current_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email) {
+          return parsed.role === 'admin' ? 'admin' : 'cardapio';
+        }
+      }
+    } catch (e) {}
+    return 'auth';
+  });
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [addons, setAddons] = useState<ProductAddon[]>(INITIAL_GLOBAL_ADDONS);
@@ -125,9 +136,50 @@ export default function App() {
     } catch (e) {}
   }, [cartItems]);
 
-  // Active tracking order & order history
-  const [activeOrder, setActiveOrder] = useState<Order>(INITIAL_ORDERS[0]);
-  const [pastOrders, setPastOrders] = useState<Order[]>(INITIAL_ORDERS.slice(1));
+  // Orders list - persisted in localStorage
+  const [orders, setOrders] = useState<Order[]>(() => {
+    try {
+      const saved = localStorage.getItem('felicita_orders_list');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_ORDERS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('felicita_orders_list', JSON.stringify(orders));
+    } catch (e) {}
+  }, [orders]);
+
+  // isRevenueReset state - persisted in localStorage
+  const [isRevenueReset, setIsRevenueReset] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('felicita_revenue_reset') === 'true';
+    } catch (e) {}
+    return false;
+  });
+
+  const handleResetRevenue = () => {
+    setIsRevenueReset(true);
+    try {
+      localStorage.setItem('felicita_revenue_reset', 'true');
+    } catch (e) {}
+  };
+
+  const handleRestoreRevenue = () => {
+    setIsRevenueReset(false);
+    try {
+      localStorage.removeItem('felicita_revenue_reset');
+    } catch (e) {}
+  };
+
+  const handleDeleteOrder = (orderId: string) => {
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+  };
+
+  const handleClearAllOrders = () => {
+    setOrders([]);
+  };
 
   // Compute cart counts and totals
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -232,7 +284,7 @@ export default function App() {
       );
     }
 
-    setActiveOrder(createdOrder);
+    setOrders(prev => [createdOrder, ...prev]);
     setCartItems([]); // Reset cart
     setCurrentTab('rastreio');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -249,10 +301,7 @@ export default function App() {
   };
 
   const handleUpdateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
-    if (activeOrder.id === orderId) {
-      setActiveOrder(prev => ({ ...prev, status: newStatus }));
-    }
-    setPastOrders(prev =>
+    setOrders(prev =>
       prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
   };
@@ -397,17 +446,7 @@ export default function App() {
       deliveriesCount: 852
     };
 
-    if (activeOrder.id === orderId) {
-      setActiveOrder(prev => ({
-        ...prev,
-        courier: {
-          ...(prev.courier || fallbackCourier),
-          name: courierName || prev.courier?.name || 'Mateus Siqueira',
-          phone: courierPhone
-        }
-      }));
-    }
-    setPastOrders(prev =>
+    setOrders(prev =>
       prev.map(o =>
         o.id === orderId
           ? {
@@ -422,6 +461,18 @@ export default function App() {
       )
     );
   };
+
+  // Ao iniciar o sistema sem estar logado em nenhuma conta, abre APENAS a tela de login
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-[#fef8f3] text-[#1d1b19] font-sans antialiased flex flex-col justify-center items-center py-6 sm:py-10 px-4 selection:bg-[#ffd9de] selection:text-[#3f0015]">
+        <AuthScreen
+          customers={customers}
+          onLoginSuccess={handleLoginSuccess}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fef8f3] text-[#1d1b19] font-sans antialiased selection:bg-[#ffd9de] selection:text-[#3f0015]">
@@ -476,8 +527,8 @@ export default function App() {
 
         {currentTab === 'rastreio' && (
           <OrderTrackingScreen
-            order={activeOrder}
-            pastOrders={pastOrders}
+            order={orders[0] || null}
+            pastOrders={orders.slice(1)}
             onNavigateToMenu={() => setCurrentTab('cardapio')}
             onReorder={handleReorder}
           />
@@ -495,7 +546,7 @@ export default function App() {
         {currentTab === 'admin' && (
           currentUser.role === 'admin' ? (
             <AdminPanel
-              orders={[activeOrder, ...pastOrders]}
+              orders={orders}
               products={products}
               categories={categories}
               addons={addons}
@@ -513,6 +564,11 @@ export default function App() {
               onSetProductStock={handleSetProductStock}
               onUpdateStoreSettings={handleUpdateStoreSettings}
               onUpdateOrderCourier={handleUpdateOrderCourier}
+              onDeleteOrder={handleDeleteOrder}
+              onClearAllOrders={handleClearAllOrders}
+              onResetRevenue={handleResetRevenue}
+              onRestoreRevenue={handleRestoreRevenue}
+              isRevenueReset={isRevenueReset}
               onLogout={handleLogout}
             />
           ) : (
