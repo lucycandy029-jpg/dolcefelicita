@@ -29,6 +29,20 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
   const [customNotes, setCustomNotes] = useState<string>('');
   const [justAddedFeedback, setJustAddedFeedback] = useState<boolean>(false);
 
+  // Keep active product in sync if updated by admin in real-time
+  React.useEffect(() => {
+    if (activeProduct && activeProduct.id) {
+      const match = products.find(p => p.id === activeProduct.id);
+      if (match) {
+        setActiveProduct(match);
+      } else if (products.length > 0) {
+        setActiveProduct(products[0]);
+      }
+    } else if (products.length > 0) {
+      setActiveProduct(products[0]);
+    }
+  }, [products]);
+
   // Compute live price for customization drawer
   const calculateDrawerTotal = () => {
     let addonsTotal = 0;
@@ -118,6 +132,9 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
             {categories.map(cat => {
               const isActive = selectedCategoryId === cat.id;
+              const count = cat.id === 'all'
+                ? products.length
+                : products.filter(p => p.categoryId === cat.id).length;
               return (
                 <button
                   key={cat.id}
@@ -134,7 +151,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
                       isActive ? 'bg-white/20 text-white' : 'bg-[#e6e2dd] text-[#7f5347]'
                     }`}
                   >
-                    {cat.count}
+                    {count}
                   </span>
                 </button>
               );

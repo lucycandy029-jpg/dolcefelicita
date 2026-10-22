@@ -10,7 +10,7 @@ import {
   ShieldCheck, 
   ArrowLeft 
 } from 'lucide-react';
-import { Order } from '../types';
+import { Order, OrderStatus } from '../types';
 
 interface OrderTrackingScreenProps {
   order?: Order | null;
@@ -51,6 +51,88 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
     );
   }
 
+  // Dynamic stage calculation based on order.status
+  const getStageInfo = (status: OrderStatus) => {
+    switch (status) {
+      case 'pending':
+        return {
+          progressPercent: 20,
+          currentStepIndex: 0,
+          statusBadge: 'Aguardando Confirmação',
+          statusDesc: 'Seu pedido foi recebido no ateliê e aguarda aprovação da cozinha.',
+          estimateLabel: 'Hoje: 35 – 50 min',
+          timeRemaining: 'Aprox. 45 min restantes'
+        };
+      case 'confirmed':
+        return {
+          progressPercent: 40,
+          currentStepIndex: 1,
+          statusBadge: 'Confirmado pela Confeitaria',
+          statusDesc: 'Pedido e pagamento aprovados! Ingredientes separados na bancada.',
+          estimateLabel: 'Hoje: 30 – 45 min',
+          timeRemaining: 'Aprox. 35 min restantes'
+        };
+      case 'preparing':
+        return {
+          progressPercent: 60,
+          currentStepIndex: 2,
+          statusBadge: 'Na Cozinha (Fornada Fresquinha)',
+          statusDesc: 'Seus doces estão sendo assados, recheados e embalados na caixa térmica.',
+          estimateLabel: 'Hoje: 25 – 35 min',
+          timeRemaining: 'Aprox. 25 min restantes'
+        };
+      case 'ready':
+        return {
+          progressPercent: 80,
+          currentStepIndex: 3,
+          statusBadge: 'Pronto para Envio',
+          statusDesc: 'Doces com lacre térmico aroma-safe aguardando partida do motoboy.',
+          estimateLabel: 'Hoje: 15 – 25 min',
+          timeRemaining: 'Aprox. 15 min restantes'
+        };
+      case 'out_for_delivery':
+        return {
+          progressPercent: 92,
+          currentStepIndex: 4,
+          statusBadge: 'Saiu para Entrega (A Caminho!)',
+          statusDesc: `O motoboy ${order.courier?.name || 'Mateus Siqueira'} já está na sua rua a caminho do seu endereço!`,
+          estimateLabel: 'Hoje: 5 – 15 min',
+          timeRemaining: 'Chegando em instantes!'
+        };
+      case 'delivered':
+        return {
+          progressPercent: 100,
+          currentStepIndex: 5,
+          statusBadge: 'Pedido Entregue! 🎉',
+          statusDesc: 'Seu pacote de doces foi entregue com sucesso! Bom apetite!',
+          estimateLabel: 'Entregue com Sucesso',
+          timeRemaining: 'Concluído'
+        };
+      case 'cancelled':
+        return {
+          progressPercent: 100,
+          currentStepIndex: -1,
+          statusBadge: 'Pedido Cancelado',
+          statusDesc: 'Este pedido foi cancelado pela confeitaria. Dúvidas pelo WhatsApp.',
+          estimateLabel: 'Cancelado',
+          timeRemaining: 'Encerrado'
+        };
+      default:
+        return {
+          progressPercent: 50,
+          currentStepIndex: 2,
+          statusBadge: 'Em Andamento',
+          statusDesc: 'Seu pedido está em andamento na confeitaria.',
+          estimateLabel: 'Hoje: 30 – 45 min',
+          timeRemaining: 'Em andamento'
+        };
+    }
+  };
+
+  const stage = getStageInfo(order.status);
+  const isCancelled = order.status === 'cancelled';
+  const isDelivered = order.status === 'delivered';
+
   return (
     <div className="w-full pb-16">
       {/* Top Hero Banner */}
@@ -61,42 +143,64 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
             <div className="flex items-start gap-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#e87a90] text-white flex items-center justify-center shadow-lg shrink-0">
-                <span className="material-symbols-outlined text-[32px] sm:text-[40px]">bakery_dining</span>
+              <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full text-white flex items-center justify-center shadow-lg shrink-0 ${
+                isCancelled ? 'bg-rose-600' : isDelivered ? 'bg-emerald-600' : 'bg-[#e87a90]'
+              }`}>
+                <span className="material-symbols-outlined text-[32px] sm:text-[40px]">
+                  {isCancelled ? 'cancel' : isDelivered ? 'verified' : 'bakery_dining'}
+                </span>
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-3 py-0.5 rounded-full bg-[#f2ede8] text-[10px] text-[#7f5347] uppercase font-bold">
-                    Status em Tempo Real
+                  <span className="px-3 py-0.5 rounded-full bg-[#f2ede8] text-[10px] text-[#7f5347] uppercase font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Status em Tempo Real:
                   </span>
-                  <span className="px-3 py-0.5 rounded-full bg-[#ffd9de] text-[#3f0015] text-[10px] font-bold">
-                    {order.paymentMethod === 'pix' ? 'PIX Confirmado' : 'Pagamento Aprovado'}
+                  <span className={`px-3 py-0.5 rounded-full text-[10px] font-bold ${
+                    isCancelled 
+                      ? 'bg-rose-100 text-rose-800' 
+                      : isDelivered 
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-[#ffd9de] text-[#3f0015]'
+                  }`}>
+                    {stage.statusBadge}
                   </span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1d1b19] mt-1 tracking-tight font-heading">
-                  Pedido #{order.orderNumber} Confirmado com Sucesso! 🎉
+                  {isCancelled 
+                    ? `Pedido #${order.orderNumber} Cancelado`
+                    : isDelivered
+                    ? `Pedido #${order.orderNumber} Entregue com Sucesso! 🎉`
+                    : `Acompanhando Pedido #${order.orderNumber}`
+                  }
                 </h1>
                 <p className="text-xs sm:text-sm text-[#554245] mt-0.5">
-                  Obrigado por escolher a Felicitá Doces! Já estamos preparando tudo com carinho e ingredientes nobres.
+                  {stage.statusDesc}
                 </p>
               </div>
             </div>
 
             {/* Quick Delivery Estimate Card */}
             <div className="w-full lg:w-auto p-4 rounded-2xl bg-white shadow-sm flex items-center gap-4 shrink-0 border border-[#dac0c3]/30">
-              <div className="w-12 h-12 rounded-full bg-[#ffdbc9] text-[#572500] flex items-center justify-center shrink-0">
-                <Clock className="w-6 h-6 text-[#994703]" />
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+                isCancelled ? 'bg-rose-100 text-rose-700' : isDelivered ? 'bg-emerald-100 text-emerald-700' : 'bg-[#ffdbc9] text-[#572500]'
+              }`}>
+                <Clock className="w-6 h-6 text-inherit" />
               </div>
               <div className="flex flex-col pr-2">
                 <span className="text-[10px] text-[#7f5347] uppercase font-bold tracking-wider">
                   Previsão de Entrega
                 </span>
                 <span className="text-sm sm:text-base font-bold text-[#1d1b19]">
-                  Hoje: 16:35 – 16:50
+                  {stage.estimateLabel}
                 </span>
-                <span className="text-xs text-[#9c3e54] font-semibold flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#9c3e54] animate-ping inline-block"></span>
-                  Aprox. 35 minutos restantes
+                <span className={`text-xs font-semibold flex items-center gap-1 ${
+                  isCancelled ? 'text-rose-600' : isDelivered ? 'text-emerald-600' : 'text-[#9c3e54]'
+                }`}>
+                  {!isCancelled && !isDelivered && (
+                    <span className="w-2 h-2 rounded-full bg-[#9c3e54] animate-ping inline-block"></span>
+                  )}
+                  {stage.timeRemaining}
                 </span>
               </div>
             </div>
@@ -114,21 +218,26 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
               <div className="flex items-center justify-between pb-4">
                 <div className="flex flex-col">
                   <span className="text-[10px] text-[#7f5347] uppercase font-bold tracking-wider">
-                    Progresso da Cozinha
+                    Linha do Tempo ao Vivo
                   </span>
                   <h2 className="text-xl font-bold text-[#1d1b19] font-heading">
                     Etapas do seu Doce Momento
                   </h2>
                 </div>
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f2ede8] text-[#554245] text-xs font-semibold">
-                  <span className="material-symbols-outlined text-[15px] text-[#994703]">cloud_download</span>
-                  <span>Atualizado há 2 min</span>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                  <span>Sincronizado em Tempo Real</span>
                 </div>
               </div>
 
               {/* Progress bar */}
               <div className="w-full bg-[#f2ede8] rounded-full h-2.5 my-4 overflow-hidden">
-                <div className="bg-[#9c3e54] h-full rounded-full transition-all duration-1000 ease-out w-[58%]"></div>
+                <div 
+                  className={`h-full rounded-full transition-all duration-700 ease-out ${
+                    isCancelled ? 'bg-rose-500' : isDelivered ? 'bg-emerald-600' : 'bg-[#9c3e54]'
+                  }`}
+                  style={{ width: `${stage.progressPercent}%` }}
+                ></div>
               </div>
 
               {/* Timeline steps */}
@@ -137,90 +246,149 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
 
                 {/* Step 1: Pedido Realizado */}
                 <div className="flex items-start gap-4 relative z-10">
-                  <div className="w-12 h-12 rounded-full bg-[#9c3e54] text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    stage.currentStepIndex >= 0 ? 'bg-[#9c3e54] text-white' : 'bg-[#e6e2dd] text-[#554245]'
+                  }`}>
                     <Check className="w-5 h-5" />
                   </div>
                   <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between pt-1">
                     <div>
-                      <h3 className="text-sm sm:text-base font-bold text-[#1d1b19]">Pedido Realizado</h3>
+                      <h3 className="text-sm sm:text-base font-bold text-[#1d1b19]">1. Pedido Realizado</h3>
                       <p className="text-xs text-[#554245]">Recebemos sua escolha no nosso ateliê central.</p>
                     </div>
                     <span className="text-[10px] text-[#7f5347] font-bold mt-1 sm:mt-0 bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit">
-                      16:05
+                      Concluído
                     </span>
                   </div>
                 </div>
 
-                {/* Step 2: Pagamento Aprovado */}
-                <div className="flex items-start gap-4 relative z-10">
-                  <div className="w-12 h-12 rounded-full bg-[#9c3e54] text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <Check className="w-5 h-5" />
+                {/* Step 2: Pagamento e Confirmação */}
+                <div className={`flex items-start gap-4 relative z-10 ${stage.currentStepIndex < 1 ? 'opacity-50' : ''}`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    stage.currentStepIndex >= 1 ? 'bg-[#9c3e54] text-white' : 'bg-[#e6e2dd] text-[#554245]'
+                  }`}>
+                    {stage.currentStepIndex >= 1 ? <Check className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
                   </div>
                   <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between pt-1">
                     <div>
-                      <h3 className="text-sm sm:text-base font-bold text-[#1d1b19]">Pagamento Aprovado</h3>
-                      <p className="text-xs text-[#554245]">Autenticação instantânea via Banco Central (PIX).</p>
+                      <h3 className="text-sm sm:text-base font-bold text-[#1d1b19]">2. Pagamento & Confirmação</h3>
+                      <p className="text-xs text-[#554245]">
+                        {order.paymentMethod === 'pix' ? 'Pagamento online via PIX validado.' : 'Pagamento na entrega agendado com a maquininha.'}
+                      </p>
                     </div>
                     <span className="text-[10px] text-[#7f5347] font-bold mt-1 sm:mt-0 bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit">
-                      16:06
+                      {stage.currentStepIndex >= 1 ? 'Confirmado' : 'Aguardando'}
                     </span>
                   </div>
                 </div>
 
-                {/* Step 3: Na Cozinha (Active) */}
-                <div className="flex items-start gap-4 relative z-10">
-                  <div className="relative w-12 h-12 rounded-full bg-[#994703] text-white flex items-center justify-center shrink-0 shadow-md">
-                    <span className="material-symbols-outlined text-[20px]">oven_gen</span>
-                    <span className="absolute -inset-1 rounded-full bg-[#e6813f]/40 animate-ping -z-10"></span>
+                {/* Step 3: Na Cozinha (Fornada Fresquinha) */}
+                <div className={`flex items-start gap-4 relative z-10 ${stage.currentStepIndex < 2 ? 'opacity-50' : ''}`}>
+                  <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+                    stage.currentStepIndex === 2 
+                      ? 'bg-[#994703] text-white shadow-md' 
+                      : stage.currentStepIndex > 2 
+                      ? 'bg-[#9c3e54] text-white shadow-sm'
+                      : 'bg-[#e6e2dd] text-[#554245]'
+                  }`}>
+                    {stage.currentStepIndex > 2 ? (
+                      <Check className="w-5 h-5" />
+                    ) : (
+                      <span className="material-symbols-outlined text-[20px]">oven_gen</span>
+                    )}
+                    {stage.currentStepIndex === 2 && (
+                      <span className="absolute -inset-1 rounded-full bg-[#e6813f]/40 animate-ping -z-10"></span>
+                    )}
                   </div>
-                  <div className="flex-1 flex flex-col sm:flex-row sm:items-start justify-between pt-1 bg-[#f8f3ee] p-4 rounded-2xl border border-[#dac0c3]/20">
+                  <div className={`flex-1 flex flex-col sm:flex-row sm:items-start justify-between pt-1 rounded-2xl ${
+                    stage.currentStepIndex === 2 ? 'bg-[#f8f3ee] p-4 border border-[#dac0c3]/40' : ''
+                  }`}>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm sm:text-base font-bold text-[#994703]">
-                          Na Cozinha: Fornada Fresquinha
+                        <h3 className={`text-sm sm:text-base font-bold ${stage.currentStepIndex === 2 ? 'text-[#994703]' : 'text-[#1d1b19]'}`}>
+                          3. Na Cozinha: Fornada Fresquinha
                         </h3>
-                        <span className="px-2 py-0.5 rounded-full bg-[#ffdbc9] text-[#572500] text-[10px] font-bold">
-                          Em Andamento
-                        </span>
+                        {stage.currentStepIndex === 2 && (
+                          <span className="px-2 py-0.5 rounded-full bg-[#ffdbc9] text-[#572500] text-[10px] font-bold">
+                            Em Andamento
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-[#554245] mt-1">
-                        Seus cookies e brownies estão sendo montados artesanalmente com chocolate belga e embalados em caixa térmica selada.
+                        Seus doces artesanais são assados com chocolate nobre e colocados em embalagem térmica selada.
                       </p>
                     </div>
-                    <span className="text-[10px] text-[#994703] font-bold mt-2 sm:mt-0 bg-[#ffb68c] px-2.5 py-0.5 rounded-full w-fit">
-                      16:10
+                    <span className="text-[10px] font-bold mt-2 sm:mt-0 bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit text-[#7f5347]">
+                      {stage.currentStepIndex > 2 ? 'Concluído' : stage.currentStepIndex === 2 ? 'Forno Aquecido' : 'Aguardando'}
                     </span>
                   </div>
                 </div>
 
                 {/* Step 4: Saiu para Entrega */}
-                <div className="flex items-start gap-4 relative z-10 opacity-70">
-                  <div className="w-12 h-12 rounded-full bg-[#e6e2dd] text-[#554245] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[22px]">two_wheeler</span>
+                <div className={`flex items-start gap-4 relative z-10 ${stage.currentStepIndex < 3 ? 'opacity-50' : ''}`}>
+                  <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+                    stage.currentStepIndex >= 4 
+                      ? (isDelivered ? 'bg-[#9c3e54] text-white' : 'bg-blue-600 text-white shadow-md')
+                      : stage.currentStepIndex === 3
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-[#e6e2dd] text-[#554245]'
+                  }`}>
+                    {stage.currentStepIndex >= 5 ? (
+                      <Check className="w-5 h-5" />
+                    ) : (
+                      <span className="material-symbols-outlined text-[22px]">two_wheeler</span>
+                    )}
+                    {stage.currentStepIndex === 4 && (
+                      <span className="absolute -inset-1 rounded-full bg-blue-400/40 animate-ping -z-10"></span>
+                    )}
                   </div>
-                  <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between pt-1">
+                  <div className={`flex-1 flex flex-col sm:flex-row sm:items-start justify-between pt-1 rounded-2xl ${
+                    stage.currentStepIndex === 4 ? 'bg-blue-50/60 p-4 border border-blue-200' : ''
+                  }`}>
                     <div>
-                      <h3 className="text-sm sm:text-base font-bold text-[#1d1b19]">Saiu para Entrega</h3>
-                      <p className="text-xs text-[#554245]">Motoboy exclusivo Felicitá com bag térmica a caminho.</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className={`text-sm sm:text-base font-bold ${stage.currentStepIndex === 4 ? 'text-blue-900' : 'text-[#1d1b19]'}`}>
+                          4. Saiu para Entrega (A Caminho)
+                        </h3>
+                        {stage.currentStepIndex === 4 && (
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold">
+                            Em Rota
+                          </span>
+                        )}
+                        {stage.currentStepIndex === 3 && (
+                          <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-bold">
+                            Pronto para Partida
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#554245] mt-1">
+                        Motoboy {order.courier?.name || 'Mateus Siqueira'} com bag térmica e lacre de segurança a caminho.
+                      </p>
                     </div>
-                    <span className="text-[10px] text-[#877274] bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit">
-                      Previsão 16:30
+                    <span className="text-[10px] font-bold mt-2 sm:mt-0 bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit text-[#7f5347]">
+                      {stage.currentStepIndex >= 5 ? 'Concluído' : stage.currentStepIndex === 4 ? 'Na Sua Rua' : 'Próxima Etapa'}
                     </span>
                   </div>
                 </div>
 
                 {/* Step 5: Pedido Entregue */}
-                <div className="flex items-start gap-4 relative z-10 opacity-50">
-                  <div className="w-12 h-12 rounded-full bg-[#e6e2dd] text-[#554245] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[22px]">home_pin</span>
+                <div className={`flex items-start gap-4 relative z-10 ${!isDelivered ? 'opacity-50' : ''}`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+                    isDelivered ? 'bg-emerald-600 text-white shadow-md' : 'bg-[#e6e2dd] text-[#554245]'
+                  }`}>
+                    {isDelivered ? <Check className="w-5 h-5" /> : <span className="material-symbols-outlined text-[22px]">home_pin</span>}
                   </div>
-                  <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between pt-1">
+                  <div className={`flex-1 flex flex-col sm:flex-row sm:items-center justify-between pt-1 rounded-2xl ${
+                    isDelivered ? 'bg-emerald-50 p-4 border border-emerald-200' : ''
+                  }`}>
                     <div>
-                      <h3 className="text-sm sm:text-base font-bold text-[#1d1b19]">Pedido Entregue</h3>
+                      <h3 className={`text-sm sm:text-base font-bold ${isDelivered ? 'text-emerald-900' : 'text-[#1d1b19]'}`}>
+                        5. Pedido Entregue
+                      </h3>
                       <p className="text-xs text-[#554245]">Aproveite sua pausa doce com total felicidade!</p>
                     </div>
-                    <span className="text-[10px] text-[#877274] bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit">
-                      Previsão 16:45
+                    <span className="text-[10px] font-bold mt-1 sm:mt-0 bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit text-[#7f5347]">
+                      {isDelivered ? 'Entregue com Sucesso' : 'Destino Final'}
                     </span>
                   </div>
                 </div>

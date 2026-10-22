@@ -30,6 +30,7 @@ import {
   Customer 
 } from './types';
 import { ShoppingBag, ArrowRight } from 'lucide-react';
+import { subscribeToSync, broadcastSync } from './services/syncService';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>(() => {
@@ -206,6 +207,26 @@ export default function App() {
     } catch (e) {}
   }, [orders]);
 
+  // Real-Time Cross-Tab / Cross-Device State Synchronization
+  useEffect(() => {
+    const unsubscribe = subscribeToSync((payload) => {
+      if (payload.type === 'ORDERS_UPDATED' && Array.isArray(payload.data)) {
+        setOrders(payload.data);
+      } else if (payload.type === 'PRODUCTS_UPDATED' && Array.isArray(payload.data)) {
+        setProducts(payload.data);
+      } else if (payload.type === 'CATEGORIES_UPDATED' && Array.isArray(payload.data)) {
+        setCategories(payload.data);
+      } else if (payload.type === 'ADDONS_UPDATED' && Array.isArray(payload.data)) {
+        setAddons(payload.data);
+      } else if (payload.type === 'STORE_SETTINGS_UPDATED' && payload.data) {
+        setStoreSettings(payload.data);
+      } else if (payload.type === 'CUSTOMERS_UPDATED' && Array.isArray(payload.data)) {
+        setCustomers(payload.data);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   // isRevenueReset state - persisted in localStorage
   const [isRevenueReset, setIsRevenueReset] = useState<boolean>(() => {
     try {
@@ -229,11 +250,20 @@ export default function App() {
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    setOrders(prev => prev.filter(o => o.id !== orderId));
+    const updated = orders.filter(o => o.id !== orderId);
+    setOrders(updated);
+    try {
+      localStorage.setItem('felicita_orders_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('ORDERS_UPDATED', updated);
   };
 
   const handleClearAllOrders = () => {
     setOrders([]);
+    try {
+      localStorage.setItem('felicita_orders_list', JSON.stringify([]));
+    } catch (e) {}
+    broadcastSync('ORDERS_UPDATED', []);
   };
 
   // Compute cart counts and totals
@@ -325,8 +355,8 @@ export default function App() {
 
     // Update customer's order history metrics in customers list
     if (currentUser.email) {
-      setCustomers(prev =>
-        prev.map(c => {
+      setCustomers(prev => {
+        const updated = prev.map(c => {
           if (c.email.toLowerCase() === currentUser.email.toLowerCase()) {
             return {
               ...c,
@@ -335,12 +365,26 @@ export default function App() {
             };
           }
           return c;
-        })
-      );
+        });
+        try {
+          localStorage.setItem('felicita_customers_list', JSON.stringify(updated));
+        } catch (e) {}
+        broadcastSync('CUSTOMERS_UPDATED', updated);
+        return updated;
+      });
     }
 
-    setOrders(prev => [createdOrder, ...prev]);
+    const updatedOrders = [createdOrder, ...orders];
+    setOrders(updatedOrders);
+    try {
+      localStorage.setItem('felicita_orders_list', JSON.stringify(updatedOrders));
+    } catch (e) {}
+    broadcastSync('ORDERS_UPDATED', updatedOrders);
+
     setCartItems([]); // Reset cart
+    try {
+      localStorage.removeItem('felicita_cart_items');
+    } catch (e) {}
     setCurrentTab('rastreio');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -356,68 +400,139 @@ export default function App() {
   };
 
   const handleUpdateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
-    setOrders(prev =>
-      prev.map(o => (o.id === orderId ? { ...o, status: newStatus } : o))
+    const updated = orders.map(o =>
+      o.id === orderId ? { ...o, status: newStatus, updatedAt: 'Agora' } : o
     );
+    setOrders(updated);
+    try {
+      localStorage.setItem('felicita_orders_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('ORDERS_UPDATED', updated);
   };
 
   const handleAddStockBatch = (productId: string, quantity: number) => {
-    setProducts(prev =>
-      prev.map(p =>
-        p.id === productId ? { ...p, stockAvailable: Math.max(0, (p.stockAvailable || 0) + quantity) } : p
-      )
+    const updated = products.map(p =>
+      p.id === productId ? { ...p, stockAvailable: Math.max(0, (p.stockAvailable || 0) + quantity) } : p
     );
+    setProducts(updated);
+    try {
+      localStorage.setItem('felicita_products_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('PRODUCTS_UPDATED', updated);
   };
 
   const handleSetProductStock = (productId: string, quantity: number) => {
-    setProducts(prev =>
-      prev.map(p =>
-        p.id === productId ? { ...p, stockAvailable: Math.max(0, quantity) } : p
-      )
+    const updated = products.map(p =>
+      p.id === productId ? { ...p, stockAvailable: Math.max(0, quantity) } : p
     );
+    setProducts(updated);
+    try {
+      localStorage.setItem('felicita_products_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('PRODUCTS_UPDATED', updated);
   };
 
   // Administrator CRUD actions
   const handleAddProduct = (newProd: Product) => {
-    setProducts(prev => [newProd, ...prev]);
+    const updatedProducts = [newProd, ...products];
+    setProducts(updatedProducts);
+    try {
+      localStorage.setItem('felicita_products_list', JSON.stringify(updatedProducts));
+    } catch (e) {}
+    broadcastSync('PRODUCTS_UPDATED', updatedProducts);
+
     // update category count
-    setCategories(prev =>
-      prev.map(c => (c.id === newProd.categoryId || c.id === 'all' ? { ...c, count: c.count + 1 } : c))
+    const updatedCategories = categories.map(c =>
+      c.id === newProd.categoryId || c.id === 'all' ? { ...c, count: c.count + 1 } : c
     );
+    setCategories(updatedCategories);
+    try {
+      localStorage.setItem('felicita_categories_list', JSON.stringify(updatedCategories));
+    } catch (e) {}
+    broadcastSync('CATEGORIES_UPDATED', updatedCategories);
+  };
+
+  const handleUpdateProduct = (updatedProd: Product) => {
+    const updatedProducts = products.map(p => (p.id === updatedProd.id ? updatedProd : p));
+    setProducts(updatedProducts);
+    try {
+      localStorage.setItem('felicita_products_list', JSON.stringify(updatedProducts));
+    } catch (e) {}
+    broadcastSync('PRODUCTS_UPDATED', updatedProducts);
   };
 
   const handleDeleteProduct = (productId: string) => {
     const prod = products.find(p => p.id === productId);
-    setProducts(prev => prev.filter(p => p.id !== productId));
+    const updatedProducts = products.filter(p => p.id !== productId);
+    setProducts(updatedProducts);
+    try {
+      localStorage.setItem('felicita_products_list', JSON.stringify(updatedProducts));
+    } catch (e) {}
+    broadcastSync('PRODUCTS_UPDATED', updatedProducts);
+
     if (prod) {
-      setCategories(prev =>
-        prev.map(c => (c.id === prod.categoryId || c.id === 'all' ? { ...c, count: Math.max(0, c.count - 1) } : c))
+      const updatedCategories = categories.map(c =>
+        c.id === prod.categoryId || c.id === 'all' ? { ...c, count: Math.max(0, c.count - 1) } : c
       );
+      setCategories(updatedCategories);
+      try {
+        localStorage.setItem('felicita_categories_list', JSON.stringify(updatedCategories));
+      } catch (e) {}
+      broadcastSync('CATEGORIES_UPDATED', updatedCategories);
     }
   };
 
   const handleAddCategory = (newCat: Category) => {
-    setCategories(prev => [...prev, newCat]);
+    const updated = [...categories, newCat];
+    setCategories(updated);
+    try {
+      localStorage.setItem('felicita_categories_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('CATEGORIES_UPDATED', updated);
   };
 
   const handleDeleteCategory = (catId: string) => {
-    setCategories(prev => prev.filter(c => c.id !== catId));
+    const updated = categories.filter(c => c.id !== catId);
+    setCategories(updated);
+    try {
+      localStorage.setItem('felicita_categories_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('CATEGORIES_UPDATED', updated);
   };
 
   const handleAddAddon = (newAddon: ProductAddon) => {
-    setAddons(prev => [...prev, newAddon]);
+    const updated = [...addons, newAddon];
+    setAddons(updated);
+    try {
+      localStorage.setItem('felicita_addons_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('ADDONS_UPDATED', updated);
   };
 
   const handleDeleteAddon = (addonId: string) => {
-    setAddons(prev => prev.filter(a => a.id !== addonId));
+    const updated = addons.filter(a => a.id !== addonId);
+    setAddons(updated);
+    try {
+      localStorage.setItem('felicita_addons_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('ADDONS_UPDATED', updated);
   };
 
   const handleDeleteCustomer = (customerId: string) => {
-    setCustomers(prev => prev.filter(c => c.id !== customerId));
+    const updated = customers.filter(c => c.id !== customerId);
+    setCustomers(updated);
+    try {
+      localStorage.setItem('felicita_customers_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('CUSTOMERS_UPDATED', updated);
   };
 
   const handleUpdateStoreSettings = (newSettings: StoreSettings) => {
     setStoreSettings(newSettings);
+    try {
+      localStorage.setItem('felicita_store_settings', JSON.stringify(newSettings));
+    } catch (e) {}
+    broadcastSync('STORE_SETTINGS_UPDATED', newSettings);
   };
 
   const handleLogout = () => {
@@ -501,21 +616,31 @@ export default function App() {
       deliveriesCount: 852
     };
 
-    setOrders(prev =>
-      prev.map(o =>
-        o.id === orderId
-          ? {
-              ...o,
-              courier: {
-                ...(o.courier || fallbackCourier),
-                name: courierName || o.courier?.name || 'Mateus Siqueira',
-                phone: courierPhone
-              }
+    const updated = orders.map(o =>
+      o.id === orderId
+        ? {
+            ...o,
+            courier: {
+              ...(o.courier || fallbackCourier),
+              name: courierName || o.courier?.name || 'Mateus Siqueira',
+              phone: courierPhone
             }
-          : o
-      )
+          }
+        : o
     );
+    setOrders(updated);
+    try {
+      localStorage.setItem('felicita_orders_list', JSON.stringify(updated));
+    } catch (e) {}
+    broadcastSync('ORDERS_UPDATED', updated);
   };
+
+  // Filter orders for active user: customers only see their orders, while admin sees all
+  const customerOrders = (currentUser.role === 'customer' && currentUser.email)
+    ? orders.filter(o => o.customerEmail && o.customerEmail.toLowerCase() === currentUser.email.toLowerCase())
+    : orders;
+  const activeCustomerOrder = customerOrders[0] || (currentUser.role === 'admin' ? orders[0] : null);
+  const pastCustomerOrders = customerOrders.slice(1);
 
   // Ao iniciar o sistema sem estar logado em nenhuma conta, abre APENAS a tela de login
   if (!isLoggedIn) {
@@ -582,8 +707,8 @@ export default function App() {
 
         {currentTab === 'rastreio' && (
           <OrderTrackingScreen
-            order={orders[0] || null}
-            pastOrders={orders.slice(1)}
+            order={activeCustomerOrder}
+            pastOrders={pastCustomerOrders}
             onNavigateToMenu={() => setCurrentTab('cardapio')}
             onReorder={handleReorder}
           />
@@ -610,6 +735,7 @@ export default function App() {
               onUpdateOrderStatus={handleUpdateOrderStatus}
               onAddStockBatch={handleAddStockBatch}
               onAddProduct={handleAddProduct}
+              onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
               onAddCategory={handleAddCategory}
               onDeleteCategory={handleDeleteCategory}

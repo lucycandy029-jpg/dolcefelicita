@@ -46,6 +46,7 @@ interface AdminPanelProps {
   onUpdateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
   onAddStockBatch: (productId: string, quantity: number) => void;
   onAddProduct: (product: Product) => void;
+  onUpdateProduct?: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onAddCategory: (category: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
@@ -73,6 +74,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onUpdateOrderStatus,
   onAddStockBatch,
   onAddProduct,
+  onUpdateProduct,
   onDeleteProduct,
   onAddCategory,
   onDeleteCategory,
@@ -147,6 +149,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newProductBadge, setNewProductBadge] = useState<string>('Fornada do Dia');
   const [newProductImage, setNewProductImage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit Product Modal Form State
+  const [isEditProductModalOpen, setIsEditProductModalOpen] = useState<boolean>(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editProductName, setEditProductName] = useState<string>('');
+  const [editProductCategory, setEditProductCategory] = useState<string>(categories[1]?.id || 'cookies');
+  const [editProductPrice, setEditProductPrice] = useState<number>(18.00);
+  const [editProductShortDesc, setEditProductShortDesc] = useState<string>('');
+  const [editProductFullDesc, setEditProductFullDesc] = useState<string>('');
+  const [editProductUnitLabel, setEditProductUnitLabel] = useState<string>('Unidade 130g');
+  const [editProductBadge, setEditProductBadge] = useState<string>('');
+  const [editProductImage, setEditProductImage] = useState<string>('');
+  const [editProductStock, setEditProductStock] = useState<number>(20);
+  const [editProductIsAvailable, setEditProductIsAvailable] = useState<boolean>(true);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // New Addon Form State
   const [isAddonModalOpen, setIsAddonModalOpen] = useState<boolean>(false);
@@ -260,13 +277,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setNewProductShortDesc('');
     setNewProductFullDesc('');
     setNewProductImage('');
-    alert('Novo doce adicionado ao cardápio com sucesso!');
+    showToast(`"${created.name}" adicionado ao cardápio com sucesso!`);
+  };
+
+  // Open Edit Product Modal with current values
+  const handleOpenEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setEditProductName(product.name);
+    setEditProductCategory(product.categoryId);
+    setEditProductPrice(product.price);
+    setEditProductShortDesc(product.shortDescription || '');
+    setEditProductFullDesc(product.description || '');
+    setEditProductUnitLabel(product.unitLabel || 'Unidade 130g');
+    setEditProductBadge(product.badgeTag || '');
+    setEditProductImage(product.imageUrl || '');
+    setEditProductStock(product.stockAvailable ?? 20);
+    setEditProductIsAvailable(product.isAvailable !== false);
+    setIsEditProductModalOpen(true);
+  };
+
+  const handleEditImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setEditProductImage(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveEditedProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    if (!editProductName.trim()) {
+      showToast('Por favor informe o nome do doce.');
+      return;
+    }
+
+    const updated: Product = {
+      ...editingProduct,
+      name: editProductName.trim(),
+      categoryId: editProductCategory,
+      price: editProductPrice,
+      shortDescription: editProductShortDesc,
+      description: editProductFullDesc || editProductShortDesc,
+      unitLabel: editProductUnitLabel,
+      badgeTag: editProductBadge.trim() ? editProductBadge.trim() : undefined,
+      imageUrl: editProductImage || editingProduct.imageUrl,
+      stockAvailable: editProductStock,
+      isAvailable: editProductIsAvailable
+    };
+
+    if (onUpdateProduct) {
+      onUpdateProduct(updated);
+    }
+    setIsEditProductModalOpen(false);
+    setEditingProduct(null);
+    showToast(`"${updated.name}" foi atualizado e sincronizado em tempo real!`);
   };
 
   const handleCreateAddon = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAddonName.trim()) {
-      alert('Informe o nome do adicional.');
+      showToast('Informe o nome do adicional.');
       return;
     }
     const created: ProductAddon = {
@@ -279,7 +355,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsAddonModalOpen(false);
     setNewAddonName('');
     setNewAddonDesc('');
-    alert('Item de personalização adicionado com sucesso!');
+    showToast(`Opcional "${created.name}" adicionado com sucesso!`);
   };
 
   const handleCreateCategory = (e: React.FormEvent) => {
@@ -296,7 +372,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsCategoryModalOpen(false);
     setNewCategoryName('');
     setNewCategoryId('');
-    alert('Nova categoria criada com sucesso!');
+    showToast(`Categoria "${created.name}" criada com sucesso!`);
   };
 
   // WhatsApp generator based on status
@@ -1015,15 +1091,26 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                   <span className="text-[#7f5347] font-semibold text-[11px]">
                     Estoque: <strong>{product.stockAvailable || 20} un</strong>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => requestDelete('product', product.id, product.name)}
-                    className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 flex items-center gap-1 font-bold transition-colors cursor-pointer"
-                    title="Excluir doce do cardápio"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Excluir</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditProduct(product)}
+                      className="p-1.5 rounded-lg text-[#9c3e54] hover:bg-[#ffd9de]/50 flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                      title="Editar doce do cardápio"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      <span>Editar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => requestDelete('product', product.id, product.name)}
+                      className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 flex items-center gap-1 font-bold transition-colors cursor-pointer"
+                      title="Excluir doce do cardápio"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Excluir</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1826,6 +1913,239 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                   className="px-6 py-2 rounded-full bg-[#9c3e54] text-white text-xs font-bold hover:bg-[#64132b] shadow-sm"
                 >
                   Salvar no Cardápio
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL 2.5: EDIÇÃO DE DOCE DO CARDÁPIO (SINCRONIZAÇÃO EM TEMPO REAL)
+         ========================================================================= */}
+      {isEditProductModalOpen && editingProduct && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-[#dac0c3]/40 flex flex-col gap-4 relative my-auto max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsEditProductModalOpen(false)}
+              className="absolute top-4 right-4 text-[#877274] hover:text-[#1d1b19] p-1 rounded-full cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <span className="text-[10px] text-[#7f5347] uppercase font-bold tracking-wider">
+                Atualização em Tempo Real
+              </span>
+              <h3 className="text-xl font-bold text-[#1d1b19] font-heading mt-0.5">
+                Editar Doce do Cardápio
+              </h3>
+              <p className="text-xs text-[#554245]">
+                As alterações feitas aqui refletem instantaneamente no cardápio de todos os clientes sem necessidade de recarregar a página.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveEditedProduct} className="flex flex-col gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Nome do Doce</label>
+                  <input
+                    type="text"
+                    required
+                    value={editProductName}
+                    onChange={e => setEditProductName(e.target.value)}
+                    placeholder="Ex: Cookie Tortinha de Nutella"
+                    className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Categoria</label>
+                  <select
+                    value={editProductCategory}
+                    onChange={e => setEditProductCategory(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                  >
+                    {categories.filter(c => c.id !== 'all').map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Preço (R$)</label>
+                  <input
+                    type="number"
+                    step="0.50"
+                    min="1"
+                    required
+                    value={editProductPrice}
+                    onChange={e => setEditProductPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Gramatura / Unidade</label>
+                  <input
+                    type="text"
+                    value={editProductUnitLabel}
+                    onChange={e => setEditProductUnitLabel(e.target.value)}
+                    placeholder="Ex: Unidade 130g"
+                    className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Estoque Atual (un)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editProductStock}
+                    onChange={e => setEditProductStock(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Tag em Destaque</label>
+                  <select
+                    value={editProductBadge}
+                    onChange={e => setEditProductBadge(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                  >
+                    <option value="">Nenhuma</option>
+                    <option value="Mais Amado">Mais Amado</option>
+                    <option value="Fornada do Dia">Fornada do Dia</option>
+                    <option value="Mais Pedido">Mais Pedido</option>
+                    <option value="Edição Limitada">Edição Limitada</option>
+                    <option value="Novo">Novo</option>
+                    <option value="Cacau 70%">Cacau 70%</option>
+                    <option value="Sem Glúten">Sem Glúten</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Disponibilidade no Cardápio</label>
+                  <div className="flex items-center gap-4 mt-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="editAvailability"
+                        checked={editProductIsAvailable}
+                        onChange={() => setEditProductIsAvailable(true)}
+                        className="text-[#9c3e54] focus:ring-[#9c3e54]"
+                      />
+                      <span className="font-medium text-[#1d1b19]">Disponível</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="editAvailability"
+                        checked={!editProductIsAvailable}
+                        onChange={() => setEditProductIsAvailable(false)}
+                        className="text-[#9c3e54] focus:ring-[#9c3e54]"
+                      />
+                      <span className="font-medium text-rose-600">Pausado (Esgotado)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-[#1d1b19]">Descrição Curta</label>
+                <input
+                  type="text"
+                  value={editProductShortDesc}
+                  onChange={e => setEditProductShortDesc(e.target.value)}
+                  placeholder="Ex: Massa crocante e centro recheado de caramelo"
+                  className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-bold text-[#1d1b19]">Descrição Completa (Ingredientes e Detalhes)</label>
+                <textarea
+                  rows={2}
+                  value={editProductFullDesc}
+                  onChange={e => setEditProductFullDesc(e.target.value)}
+                  placeholder="Detalhes dos ingredientes nobres, procedência do cacau, etc."
+                  className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                />
+              </div>
+
+              {/* FOTO DIRETO DO DISPOSITIVO */}
+              <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30">
+                <label className="font-bold text-[#1d1b19] flex items-center justify-between">
+                  <span>Foto do Doce</span>
+                  <span className="text-[10px] text-[#7f5347] uppercase font-bold">Upload / Trocar Imagem</span>
+                </label>
+
+                <div className="flex items-center gap-4">
+                  {editProductImage ? (
+                    <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-[#dac0c3]/50 shrink-0">
+                      <img src={editProductImage} alt="Prévia" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setEditProductImage('')}
+                        className="absolute top-1 right-1 w-5 h-5 bg-red-600 text-white rounded-full flex items-center justify-center text-[10px]"
+                        title="Remover imagem"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-[#dac0c3] bg-white flex flex-col items-center justify-center text-[#877274] hover:border-[#9c3e54] cursor-pointer shrink-0 transition-colors"
+                    >
+                      <Upload className="w-5 h-5 text-[#9c3e54]" />
+                      <span className="text-[9px] mt-1 font-bold">Enviar foto</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col flex-1">
+                    <input
+                      type="file"
+                      ref={editFileInputRef}
+                      accept="image/*"
+                      onChange={handleEditImageFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="px-4 py-2 rounded-full bg-white hover:bg-[#ece7e2] text-xs font-bold text-[#1d1b19] border border-[#dac0c3] flex items-center gap-1.5 w-fit cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-[#9c3e54]" />
+                      <span>{editProductImage ? 'Substituir Foto Atual' : 'Escolher Imagem do Dispositivo'}</span>
+                    </button>
+                    <span className="text-[10px] text-[#877274] mt-1">
+                      Aceita JPG, PNG ou WEBP em alta resolução.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#f2ede8]">
+                <button
+                  type="button"
+                  onClick={() => setIsEditProductModalOpen(false)}
+                  className="px-4 py-2 rounded-full bg-[#f2ede8] text-xs font-semibold text-[#554245] hover:bg-[#ece7e2] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 rounded-full bg-[#9c3e54] text-white text-xs font-bold hover:bg-[#64132b] shadow-sm cursor-pointer"
+                >
+                  Salvar Alterações
                 </button>
               </div>
             </form>
