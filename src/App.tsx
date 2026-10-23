@@ -100,6 +100,19 @@ export default function App() {
     api.getMe().then(res => {
       if (!isMounted) return;
       if (res && res.success && res.user) {
+        // Strictly verify customer has valid email, phone, and address before authorizing entry
+        if (res.user.role === 'customer') {
+          const hasEmail = Boolean(res.user.email && res.user.email.includes('@'));
+          const cleanPhone = String(res.user.phone || '').replace(/\D/g, '');
+          const hasPhone = cleanPhone.length >= 10 && cleanPhone.length <= 11;
+          const hasAddress = Boolean(res.address && res.address.street && res.address.number && res.address.neighborhood);
+          
+          if (!hasEmail || !hasPhone || !hasAddress) {
+            setIsLoggedIn(false);
+            setCurrentTab('auth');
+            return;
+          }
+        }
         setCurrentUser(res.user);
         setIsLoggedIn(true);
         if (res.address) {
@@ -560,43 +573,58 @@ export default function App() {
   };
 
   const handleLoginSuccess = (user: User, newCustomerProfile?: Customer, newAddress?: Address) => {
+    // Strictly verify customer credentials if not admin
+    if (user.role === 'customer') {
+      const resolvedAddress = newAddress || newCustomerProfile?.address || (customers.find(c => c.email.toLowerCase() === user.email.toLowerCase())?.address);
+      const cleanPhone = String(user.phone || '').replace(/\D/g, '');
+      const hasValidEmail = Boolean(user.email && user.email.includes('@'));
+      const hasValidPhone = cleanPhone.length >= 10 && cleanPhone.length <= 11;
+      const hasValidAddress = Boolean(resolvedAddress && resolvedAddress.street && resolvedAddress.number && resolvedAddress.neighborhood);
+
+      if (!hasValidEmail || !hasValidPhone || !hasValidAddress || !resolvedAddress) {
+        setIsLoggedIn(false);
+        setCurrentTab('auth');
+        return;
+      }
+
+      setActiveAddress(resolvedAddress);
+
+      // Link login to customer profile and ensure profile appears in the Admin Panel
+      if (user.email) {
+        setCustomers(prev => {
+          const existingIndex = prev.findIndex(c => c.email.toLowerCase() === user.email.toLowerCase());
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              name: user.name || updated[existingIndex].name,
+              phone: user.phone || updated[existingIndex].phone,
+              address: resolvedAddress || updated[existingIndex].address
+            };
+            return updated;
+          }
+
+          const newCust: Customer = newCustomerProfile || {
+            id: user.id || 'cust-' + Date.now(),
+            name: user.name || 'Cliente Cadastrado',
+            email: user.email,
+            phone: user.phone || '',
+            city: `${resolvedAddress.neighborhood} • ${resolvedAddress.city}`,
+            address: resolvedAddress,
+            ordersCount: 0,
+            totalSpent: 0,
+            isActive: true,
+            createdAt: new Date().toLocaleDateString('pt-BR')
+          };
+          return [newCust, ...prev];
+        });
+      }
+    } else {
+      setActiveAddress(DEFAULT_ADDRESS);
+    }
+
     setCurrentUser(user);
     setIsLoggedIn(true);
-
-    // If new address was entered during registration or customer already had one, update active address
-    const resolvedAddress = newAddress || newCustomerProfile?.address || (customers.find(c => c.email.toLowerCase() === user.email.toLowerCase())?.address) || DEFAULT_ADDRESS;
-    setActiveAddress(resolvedAddress);
-
-    // Link login to customer profile and ensure new profile appears in the Admin Panel
-    if (user.role === 'customer' && user.email) {
-      setCustomers(prev => {
-        const existingIndex = prev.findIndex(c => c.email.toLowerCase() === user.email.toLowerCase());
-        if (existingIndex >= 0) {
-          const updated = [...prev];
-          updated[existingIndex] = {
-            ...updated[existingIndex],
-            name: user.name || updated[existingIndex].name,
-            phone: user.phone || updated[existingIndex].phone,
-            address: resolvedAddress || updated[existingIndex].address
-          };
-          return updated;
-        }
-
-        const newCust: Customer = newCustomerProfile || {
-          id: user.id || 'cust-' + Date.now(),
-          name: user.name || 'Novo Cliente',
-          email: user.email,
-          phone: user.phone || '(11) 99999-0000',
-          city: resolvedAddress ? `${resolvedAddress.neighborhood} • ${resolvedAddress.city}` : 'São Paulo - SP',
-          address: resolvedAddress,
-          ordersCount: 0,
-          totalSpent: 0,
-          isActive: true,
-          createdAt: new Date().toLocaleDateString('pt-BR')
-        };
-        return [newCust, ...prev];
-      });
-    }
 
     if (user.role === 'admin') {
       setCurrentTab('admin');
