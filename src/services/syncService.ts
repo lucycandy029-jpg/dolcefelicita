@@ -1,8 +1,20 @@
 // ==============================================================================
-// Cross-Tab & Cross-Session Real-Time Synchronization Service
+// Cross-Device & Cross-Browser Real-Time State Synchronization Service
 // Confeitaria Dolce Felicitá
-// Syncs Orders, Catalog, Statuses, and Settings in Real Time across all tabs/windows
+// Syncs Orders, Products, Categories, Stock, and Accounts across ANY device/browser
 // ==============================================================================
+
+import type { 
+  Product, 
+  Category, 
+  ProductAddon, 
+  Order, 
+  StoreSettings, 
+  Customer, 
+  User, 
+  Address, 
+  OrderStatus 
+} from '../types';
 
 export type SyncEventType = 
   | 'ORDERS_UPDATED'
@@ -10,31 +22,39 @@ export type SyncEventType =
   | 'CATEGORIES_UPDATED'
   | 'ADDONS_UPDATED'
   | 'STORE_SETTINGS_UPDATED'
-  | 'CUSTOMERS_UPDATED';
+  | 'CUSTOMERS_UPDATED'
+  | 'REVENUE_RESET_UPDATED'
+  | 'CONNECTED';
 
 export interface SyncPayload {
   type: SyncEventType;
   data: any;
   timestamp: number;
-  sourceTabId: string;
-}
-
-const CHANNEL_NAME = 'felicita_realtime_broadcast';
-const TAB_ID = 'tab_' + Math.random().toString(36).substring(2, 9);
-
-let broadcastChannel: BroadcastChannel | null = null;
-try {
-  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-    broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
-  }
-} catch (e) {
-  console.warn('BroadcastChannel not supported in this context, using storage fallback.');
+  sourceTabId?: string;
 }
 
 type SyncCallback = (payload: SyncPayload) => void;
 const listeners: Set<SyncCallback> = new Set();
 
-// Register listener
+const TAB_ID = 'tab_' + Math.random().toString(36).substring(2, 9);
+let eventSource: EventSource | null = null;
+let broadcastChannel: BroadcastChannel | null = null;
+
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    broadcastChannel = new BroadcastChannel('felicita_realtime_broadcast');
+    broadcastChannel.onmessage = (event) => {
+      const payload: SyncPayload = event.data;
+      if (payload && payload.sourceTabId !== TAB_ID) {
+        listeners.forEach(cb => {
+          try { cb(payload); } catch (e) {}
+        });
+      }
+    };
+  }
+} catch (e) {}
+
+// Subscribe to state updates
 export function subscribeToSync(callback: SyncCallback): () => void {
   listeners.add(callback);
   return () => {
@@ -42,91 +62,257 @@ export function subscribeToSync(callback: SyncCallback): () => void {
   };
 }
 
-// Broadcast an event to other tabs
-export function broadcastSync(type: SyncEventType, data: any) {
-  const payload: SyncPayload = {
-    type,
-    data,
-    timestamp: Date.now(),
-    sourceTabId: TAB_ID
-  };
+// Notify all listeners locally and across tabs
+function notifyListeners(payload: SyncPayload) {
+  listeners.forEach(cb => {
+    try {
+      cb(payload);
+    } catch (err) {
+      console.error('Error in sync callback:', err);
+    }
+  });
 
-  // 1. BroadcastChannel (Instant, sub-millisecond)
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage(payload);
     } catch (e) {}
   }
-
-  // 2. Storage event trigger via custom ping key
-  try {
-    localStorage.setItem('felicita_sync_ping', JSON.stringify({
-      type,
-      timestamp: Date.now(),
-      tabId: TAB_ID
-    }));
-  } catch (e) {}
 }
 
-// Global listener for incoming broadcasts
-if (typeof window !== 'undefined') {
-  if (broadcastChannel) {
-    broadcastChannel.onmessage = (event) => {
-      const payload: SyncPayload = event.data;
-      if (payload && payload.sourceTabId !== TAB_ID) {
-        listeners.forEach(cb => {
-          try {
-            cb(payload);
-          } catch (err) {
-            console.error('Error in sync listener callback:', err);
-          }
-        });
-      }
-    };
-  }
-
-  // Storage event listener fallback (when BroadcastChannel is not supported or cross-window)
-  window.addEventListener('storage', (e: StorageEvent) => {
-    if (e.key === 'felicita_sync_ping' && e.newValue) {
-      try {
-        const ping = JSON.parse(e.newValue);
-        if (ping.tabId !== TAB_ID) {
-          // Read updated data from localStorage for the specific entity
-          let updatedData = null;
-          if (ping.type === 'ORDERS_UPDATED') {
-            const raw = localStorage.getItem('felicita_orders_list');
-            if (raw) updatedData = JSON.parse(raw);
-          } else if (ping.type === 'PRODUCTS_UPDATED') {
-            const raw = localStorage.getItem('felicita_products_list');
-            if (raw) updatedData = JSON.parse(raw);
-          } else if (ping.type === 'CATEGORIES_UPDATED') {
-            const raw = localStorage.getItem('felicita_categories_list');
-            if (raw) updatedData = JSON.parse(raw);
-          } else if (ping.type === 'ADDONS_UPDATED') {
-            const raw = localStorage.getItem('felicita_addons_list');
-            if (raw) updatedData = JSON.parse(raw);
-          } else if (ping.type === 'STORE_SETTINGS_UPDATED') {
-            const raw = localStorage.getItem('felicita_store_settings');
-            if (raw) updatedData = JSON.parse(raw);
-          } else if (ping.type === 'CUSTOMERS_UPDATED') {
-            const raw = localStorage.getItem('felicita_customers_list');
-            if (raw) updatedData = JSON.parse(raw);
-          }
-
-          if (updatedData !== null) {
-            listeners.forEach(cb => {
-              try {
-                cb({
-                  type: ping.type,
-                  data: updatedData,
-                  timestamp: ping.timestamp,
-                  sourceTabId: ping.tabId
-                });
-              } catch (err) {}
-            });
-          }
-        }
-      } catch (err) {}
-    }
+// Local broadcast
+export function broadcastSync(type: SyncEventType, data: any) {
+  notifyListeners({
+    type,
+    data,
+    timestamp: Date.now(),
+    sourceTabId: TAB_ID
   });
 }
+
+// Initialize Server-Sent Events (SSE) connection
+export function initSSEConnection(onFullStateRefresh?: (state: any) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+
+  function connect() {
+    try {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      eventSource = new EventSource('/api/sync/events');
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload: SyncPayload = JSON.parse(event.data);
+          if (payload && payload.type) {
+            notifyListeners(payload);
+          }
+        } catch (e) {}
+      };
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        // Reconnect after 3 seconds
+        setTimeout(connect, 3000);
+      };
+    } catch (e) {
+      setTimeout(connect, 3000);
+    }
+  }
+
+  connect();
+
+  // Background polling fallback (every 3.5 seconds) for mobile wakeups or unstable connections
+  let lastSyncTime = 0;
+  const pollInterval = setInterval(async () => {
+    try {
+      const res = await fetch('/api/state');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.lastUpdated && json.lastUpdated > lastSyncTime) {
+          lastSyncTime = json.lastUpdated;
+          if (onFullStateRefresh) {
+            onFullStateRefresh(json);
+          }
+        }
+      }
+    } catch (e) {}
+  }, 3500);
+
+  return () => {
+    clearInterval(pollInterval);
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+  };
+}
+
+// ==============================================================================
+// HTTP API Client for Server Authoritative Actions
+// ==============================================================================
+
+export const api = {
+  async getState() {
+    const res = await fetch('/api/state');
+    return res.json();
+  },
+
+  async login(email: string, password?: string) {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    return res.json();
+  },
+
+  async register(data: { name: string; email: string; password?: string; phone?: string; address?: Address }) {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  async getCustomerProfile(email: string) {
+    const res = await fetch(`/api/customers/profile?email=${encodeURIComponent(email)}`);
+    return res.json();
+  },
+
+  async createOrder(order: Order) {
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order })
+    });
+    return res.json();
+  },
+
+  async updateOrderStatus(orderId: string, status: OrderStatus) {
+    const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    return res.json();
+  },
+
+  async updateOrderCourier(orderId: string, courierName: string, courierPhone: string) {
+    const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/courier`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courierName, courierPhone })
+    });
+    return res.json();
+  },
+
+  async deleteOrder(orderId: string) {
+    const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async clearAllOrders() {
+    const res = await fetch('/api/orders', {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async addProduct(product: Product) {
+    const res = await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product)
+    });
+    return res.json();
+  },
+
+  async updateProduct(product: Product) {
+    const res = await fetch(`/api/products/${encodeURIComponent(product.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product)
+    });
+    return res.json();
+  },
+
+  async deleteProduct(productId: string) {
+    const res = await fetch(`/api/products/${encodeURIComponent(productId)}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async setProductStock(productId: string, quantity?: number, delta?: number) {
+    const res = await fetch(`/api/products/${encodeURIComponent(productId)}/stock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity, delta })
+    });
+    return res.json();
+  },
+
+  async addCategory(category: Category) {
+    const res = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(category)
+    });
+    return res.json();
+  },
+
+  async deleteCategory(categoryId: string) {
+    const res = await fetch(`/api/categories/${encodeURIComponent(categoryId)}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async addAddon(addon: ProductAddon) {
+    const res = await fetch('/api/addons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(addon)
+    });
+    return res.json();
+  },
+
+  async deleteAddon(addonId: string) {
+    const res = await fetch(`/api/addons/${encodeURIComponent(addonId)}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+
+  async updateStoreSettings(settings: StoreSettings) {
+    const res = await fetch('/api/store-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    });
+    return res.json();
+  },
+
+  async setRevenueReset(isRevenueReset: boolean) {
+    const res = await fetch('/api/revenue/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isRevenueReset })
+    });
+    return res.json();
+  },
+
+  async deleteCustomer(customerId: string) {
+    const res = await fetch(`/api/customers/${encodeURIComponent(customerId)}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  }
+};

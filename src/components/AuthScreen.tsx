@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { User, Customer, Address } from '../types';
 import { BrandLogo } from './BrandLogo';
+import { api } from '../services/syncService';
 
 interface AuthScreenProps {
   customers: Customer[];
@@ -113,7 +114,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -133,6 +134,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         setFormError('Senha de administrador incorreta.');
         return;
       }
+
+      try {
+        await api.login(normalizedEmail, password);
+      } catch (e) {}
 
       const adminUser: User = {
         id: 'usr-admin-master',
@@ -172,6 +177,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         isDefault: true
       };
 
+      try {
+        const res = await api.register({
+          name: name.trim(),
+          email: normalizedEmail,
+          password,
+          phone: phone.trim() || '(11) 99999-0000',
+          address: newAddress
+        });
+
+        if (res && res.success && res.user) {
+          onLoginSuccess(res.user, res.customer, res.address || newAddress);
+          return;
+        }
+      } catch (err) {
+        console.warn('Server registration call fallback to local:', err);
+      }
+
       const newCust: Customer = {
         id: 'cust-' + Date.now(),
         name: name.trim(),
@@ -199,7 +221,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
 
     // 3. Login Mode
-    // If email matches existing customer
+    try {
+      const res = await api.login(normalizedEmail, password);
+      if (res && res.success && res.user) {
+        onLoginSuccess(res.user, res.customer, res.address);
+        return;
+      } else if (res && res.message) {
+        setFormError(res.message);
+        return;
+      }
+    } catch (err) {
+      console.warn('Server login call fallback to local:', err);
+    }
+
+    // Local fallback if offline:
     if (matchingCustomer) {
       const loggedUser: User = {
         id: matchingCustomer.id,
@@ -213,7 +248,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    // If new email logged in without register tab:
     const displayName = name.trim() || (
       normalizedEmail.split('@')[0]
         .replace(/[._-]/g, ' ')
@@ -261,11 +295,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     onLoginSuccess(newUser, newCust, fallbackAddress);
   };
 
-  const handleSocialSubmit = (e: React.FormEvent) => {
+  const handleSocialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!socialEmail || !socialName) return;
 
     const emailNorm = socialEmail.toLowerCase().trim();
+    try {
+      const res = await api.login(emailNorm, 'social_login');
+      if (res && res.success && res.user) {
+        onLoginSuccess(res.user, res.customer, res.address);
+        return;
+      }
+    } catch (err) {}
+
     const existing = customers.find(c => c.email.toLowerCase() === emailNorm);
 
     if (existing) {
