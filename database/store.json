@@ -304,6 +304,50 @@
   },
   "customers": [
     {
+      "id": "bd9d91d0-209c-4a4c-ac30-41cf1aa4a359",
+      "name": "Invasor Malicioso",
+      "email": "hacker.tentativa.1792760676986@teste.com",
+      "phone": "(11) 99999-0000",
+      "city": "Bela Vista • São Paulo",
+      "address": {
+        "id": "4ce484cd-153c-4ec8-abe2-1a6f84a525f9",
+        "title": "Endereço Principal",
+        "postalCode": "01310-100",
+        "street": "Av. Paulista",
+        "number": "1000",
+        "neighborhood": "Bela Vista",
+        "city": "São Paulo",
+        "state": "SP",
+        "isDefault": true
+      },
+      "ordersCount": 0,
+      "totalSpent": 0,
+      "isActive": true,
+      "createdAt": "23/10/2026"
+    },
+    {
+      "id": "cc22ac77-4ec4-4a2e-9ae9-03b8b69dc277",
+      "name": "Juliana Paes",
+      "email": "cliente.novo.1792760676830@teste.com",
+      "phone": "(11) 99999-0000",
+      "city": "Bela Vista • São Paulo",
+      "address": {
+        "id": "9774ddc9-86aa-4ccc-ab33-cb00e73fe77e",
+        "title": "Endereço Principal",
+        "postalCode": "01310-100",
+        "street": "Av. Paulista",
+        "number": "1000",
+        "neighborhood": "Bela Vista",
+        "city": "São Paulo",
+        "state": "SP",
+        "isDefault": true
+      },
+      "ordersCount": 0,
+      "totalSpent": 0,
+      "isActive": true,
+      "createdAt": "23/10/2026"
+    },
+    {
       "id": "abd42fb1-adfe-4158-8169-7bf87368c5e9",
       "name": "Carla Silveira",
       "email": "cliente.teste.1792759353848@teste.com",
@@ -514,7 +558,7 @@
       "email": "admin@felicitadoces.com.br",
       "phone": "(11) 98765-4321",
       "role": "admin",
-      "password": "admin",
+      "password": "$2b$10$V/sglHy3LmsgRnZxSn6tQOuFaNsu5jnk9qxtsrYGwyYVEbaPbT.Im",
       "createdAt": "2026-10-23T00:23:54.481Z"
     },
     {
@@ -578,10 +622,50 @@
         "state": "SP",
         "isDefault": true
       }
+    },
+    {
+      "id": "cc22ac77-4ec4-4a2e-9ae9-03b8b69dc277",
+      "name": "Juliana Paes",
+      "email": "cliente.novo.1792760676830@teste.com",
+      "phone": "(11) 99999-0000",
+      "role": "customer",
+      "createdAt": "2026-10-23T13:04:36.833Z",
+      "password": "$2b$10$2dfNxKWgUAh2Qi/ji2a1LONAEM0U/LYKXVWtJ24SsU3ZjlrTKxLWy",
+      "address": {
+        "id": "9774ddc9-86aa-4ccc-ab33-cb00e73fe77e",
+        "title": "Endereço Principal",
+        "postalCode": "01310-100",
+        "street": "Av. Paulista",
+        "number": "1000",
+        "neighborhood": "Bela Vista",
+        "city": "São Paulo",
+        "state": "SP",
+        "isDefault": true
+      }
+    },
+    {
+      "id": "bd9d91d0-209c-4a4c-ac30-41cf1aa4a359",
+      "name": "Invasor Malicioso",
+      "email": "hacker.tentativa.1792760676986@teste.com",
+      "phone": "(11) 99999-0000",
+      "role": "customer",
+      "createdAt": "2026-10-23T13:04:36.989Z",
+      "password": "$2b$10$XJ9rFpvqa9YkdNLWLGPCGuUF8TqXOtfCdbAFEP..6nqvK6ob4qRNS",
+      "address": {
+        "id": "4ce484cd-153c-4ec8-abe2-1a6f84a525f9",
+        "title": "Endereço Principal",
+        "postalCode": "01310-100",
+        "street": "Av. Paulista",
+        "number": "1000",
+        "neighborhood": "Bela Vista",
+        "city": "São Paulo",
+        "state": "SP",
+        "isDefault": true
+      }
     }
   ],
   "isRevenueReset": false,
-  "lastUpdated": 1792759353918,
+  "lastUpdated": 1792760677328,
   "sessions": {
     "d81b44c20c7d9d36149aed85f10ddb8679e0927214b7d68e0d0f4069bc6a4686": {
       "userId": "usr-admin-master",
@@ -594,6 +678,22 @@
     "9b9edbc19d80cfe2955c864fa26921b32b444d019025e893b67c5230487b4bd2": {
       "userId": "abd42fb1-adfe-4158-8169-7bf87368c5e9",
       "expiresAt": 1795351353913
+    },
+    "d469aea3f06a9dff5679d0982fbda3164425598aceee57eaecf81e36f0a7e7f1": {
+      "userId": "cc22ac77-4ec4-4a2e-9ae9-03b8b69dc277",
+      "expiresAt": 1795352676983
+    },
+    "478a789f853c12417c886b42e43fef78f44e5bbad4bd0e95bb58bfae861d4795": {
+      "userId": "bd9d91d0-209c-4a4c-ac30-41cf1aa4a359",
+      "expiresAt": 1795352677100
+    },
+    "a68f88b6a13ebf32ed1c4df1c727163673c83ace51e479d241019bee084ac8ea": {
+      "userId": "usr-admin-master",
+      "expiresAt": 1795352677211
+    },
+    "028c2942dee4e0608bbd15592918f6bdcd32a1d9fbadab0d82f12cac89b1aa6d": {
+      "userId": "usr-admin-master",
+      "expiresAt": 1795352677328
     }
   }
 }

@@ -347,44 +347,28 @@ async function startServer() {
   });
 
   // ============================================================================
-  // AUTHENTICATION & MULTI-DEVICE / MULTI-BROWSER ACCOUNT SYNC
+  // AUTHENTICATION & AUTHORIZATION HELPERS & MIDDLEWARES
   // ============================================================================
 
-  // 1. Session verification (/api/auth/me) - called on app load by any browser
-  app.get('/api/auth/me', async (req: Request, res: Response) => {
+  async function authenticateRequest(req: Request): Promise<{ user: User; sessionId: string } | null> {
     const sessionId = getSessionIdFromRequest(req);
+    if (!sessionId) return null;
 
-    if (!sessionId) {
-      res.json({ success: false, user: null, message: 'Nenhuma sessão ativa.' });
-      return;
-    }
-
-    // Try PostgreSQL session lookup first
+    // 1. If PostgreSQL connected, query user_sessions in PostgreSQL
     if (isPgConnected()) {
       const pgSession = await pgGetSession(sessionId);
-      if (pgSession) {
-        // Also locate customer profile if exists
-        const cust = store.customers.find(c => c.email.toLowerCase() === pgSession.user.email.toLowerCase()) || null;
-        res.json({
-          success: true,
-          token: sessionId,
-          user: pgSession.user,
-          customer: cust,
-          address: pgSession.address || cust?.address || DEFAULT_ADDRESS
-        });
-        return;
+      if (pgSession && pgSession.user) {
+        return { user: pgSession.user, sessionId };
       }
+      return null;
     }
 
-    // Fallback to local store session
+    // 2. If PostgreSQL not connected, check local store.sessions
     const localSession = store.sessions[sessionId];
     if (localSession && localSession.expiresAt > Date.now()) {
       const user = store.users.find(u => u.id === localSession.userId);
       if (user) {
-        const cust = store.customers.find(c => c.email.toLowerCase() === user.email.toLowerCase()) || null;
-        res.json({
-          success: true,
-          token: sessionId,
+        return {
           user: {
             id: user.id,
             name: user.name,
@@ -393,194 +377,151 @@ async function startServer() {
             role: user.role,
             createdAt: user.createdAt
           },
-          customer: cust,
-          address: cust?.address || user.address || DEFAULT_ADDRESS
-        });
-        return;
+          sessionId
+        };
       }
     }
 
-    // Session expired or not found
-    clearAuthCookie(req, res);
-    res.json({ success: false, user: null, message: 'Sessão expirada.' });
+    return null;
+  }
+
+  // Middleware: requires any authenticated user (HTTP 401 if not authenticated)
+  async function requireAuth(req: Request, res: Response, next: express.NextFunction) {
+    const auth = await authenticateRequest(req);
+    if (!auth) {
+      res.status(401).json({ success: false, message: 'Autenticação necessária. Faça login para continuar.' });
+      return;
+    }
+    (req as any).user = auth.user;
+    (req as any).sessionId = auth.sessionId;
+    next();
+  }
+
+  // Middleware: requires authenticated admin (HTTP 401 if unauthenticated, HTTP 403 if not admin)
+  async function requireAdmin(req: Request, res: Response, next: express.NextFunction) {
+    const auth = await authenticateRequest(req);
+    if (!auth) {
+      res.status(401).json({ success: false, message: 'Autenticação necessária.' });
+      return;
+    }
+    if (auth.user.role !== 'admin') {
+      res.status(403).json({ success: false, message: 'Acesso restrito para administradores.' });
+      return;
+    }
+    (req as any).user = auth.user;
+    (req as any).sessionId = auth.sessionId;
+    next();
+  }
+
+  async function verifyUserPassword(provided: string, storedHashOrPlain?: string): Promise<boolean> {
+    if (!provided || !storedHashOrPlain) return false;
+    if (storedHashOrPlain.startsWith('$2a$') || storedHashOrPlain.startsWith('$2b$')) {
+      return await bcrypt.compare(provided, storedHashOrPlain).catch(() => false);
+    }
+    return provided === storedHashOrPlain;
+  }
+
+  // ============================================================================
+  // AUTHENTICATION ENDPOINTS
+  // ============================================================================
+
+  // 1. Session verification (/api/auth/me) - returns HTTP 401 when no session or expired
+  app.get('/api/auth/me', async (req: Request, res: Response) => {
+    const auth = await authenticateRequest(req);
+
+    if (!auth) {
+      clearAuthCookie(req, res);
+      res.status(401).json({ success: false, user: null, message: 'Nenhuma sessão ativa ou sessão expirada.' });
+      return;
+    }
+
+    const cust = store.customers.find(c => c.email.toLowerCase() === auth.user.email.toLowerCase()) || null;
+    res.json({
+      success: true,
+      token: auth.sessionId,
+      user: auth.user,
+      customer: cust,
+      address: cust?.address || DEFAULT_ADDRESS
+    });
   });
 
-  // 2. Login endpoint (/api/auth/login)
+  // 2. Login endpoint (/api/auth/login) - requires registered user, validates with bcrypt, 401 on failure
   app.post('/api/auth/login', async (req: Request, res: Response) => {
     const { email, password } = req.body;
-    if (!email) {
-      res.status(400).json({ success: false, message: 'Email obrigatório' });
+    if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+      res.status(400).json({ success: false, message: 'E-mail e senha são obrigatórios.' });
       return;
     }
 
-    const normalizedEmail = String(email).toLowerCase().trim();
-    const ADMIN_EMAILS = [
-      'admin@felicitadoces.com.br',
-      'admin@felicita.com',
-      'admin@lucycandy.com',
-      'admin@admin.com'
-    ];
-    const ADMIN_PASSWORDS = ['admin', 'admin123', 'admin2024', '123456'];
+    const normalizedEmail = email.toLowerCase().trim();
+    const trimmedPassword = password.trim();
 
-    const isAdmin = ADMIN_EMAILS.includes(normalizedEmail) || normalizedEmail.startsWith('admin@');
-
-    // Admin authentication
-    if (isAdmin) {
-      if (password && !ADMIN_PASSWORDS.includes(password)) {
-        res.status(401).json({ success: false, message: 'Senha de administrador incorreta.' });
-        return;
-      }
-
-      const adminUser: User = {
-        id: 'usr-admin-master',
-        name: 'Administrador Felicitá',
-        email: normalizedEmail,
-        phone: '(11) 98765-4321',
-        role: 'admin',
-        createdAt: new Date().toISOString()
-      };
-
-      const sessionId = crypto.randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-      if (isPgConnected()) {
-        await pgCreateSession(sessionId, adminUser.id, expiresAt, {
-          name: adminUser.name,
-          email: adminUser.email,
-          role: adminUser.role
-        });
-      }
-      store.sessions[sessionId] = { userId: adminUser.id, expiresAt: expiresAt.getTime() };
-      saveStore(store);
-
-      setAuthCookie(req, res, sessionId);
-      res.json({ success: true, token: sessionId, user: adminUser, address: DEFAULT_ADDRESS });
+    if (!normalizedEmail || !trimmedPassword) {
+      res.status(400).json({ success: false, message: 'E-mail e senha não podem estar em branco.' });
       return;
     }
 
-    // PostgreSQL User Lookup
+    // 1. If PostgreSQL is connected: query PostgreSQL users
     if (isPgConnected()) {
       const pgUserResult = await pgFindUserByEmail(normalizedEmail);
-      if (pgUserResult) {
-        // Verify password
-        const passwordMatches = password ? (
-          await bcrypt.compare(password, pgUserResult.passwordHash).catch(() => false) ||
-          password === pgUserResult.passwordHash ||
-          password === '123'
-        ) : true;
-
-        if (!passwordMatches) {
-          res.status(401).json({ success: false, message: 'Senha incorreta para este e-mail.' });
-          return;
-        }
-
-        const sessionId = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await pgCreateSession(sessionId, pgUserResult.user.id, expiresAt, {
-          name: pgUserResult.user.name,
-          email: pgUserResult.user.email,
-          role: pgUserResult.user.role
-        });
-
-        store.sessions[sessionId] = { userId: pgUserResult.user.id, expiresAt: expiresAt.getTime() };
-        saveStore(store);
-
-        setAuthCookie(req, res, sessionId);
-
-        const cust = store.customers.find(c => c.email.toLowerCase() === normalizedEmail) || null;
-        res.json({
-          success: true,
-          token: sessionId,
-          user: pgUserResult.user,
-          customer: cust,
-          address: pgUserResult.address || cust?.address || DEFAULT_ADDRESS
-        });
+      if (!pgUserResult) {
+        // User does not exist in database: return HTTP 401 immediately (DO NOT AUTO-CREATE!)
+        res.status(401).json({ success: false, message: 'E-mail ou senha incorretos.' });
         return;
       }
-    }
 
-    // Fallback to local store user lookup
-    let userRecord = store.users.find(u => u.email.toLowerCase() === normalizedEmail);
-    let customerRecord = store.customers.find(c => c.email.toLowerCase() === normalizedEmail);
-
-    if (userRecord && password) {
-      const match = userRecord.password ? (userRecord.password === password || await bcrypt.compare(password, userRecord.password).catch(() => false)) : true;
-      if (!match) {
-        res.status(401).json({ success: false, message: 'Senha incorreta.' });
+      const isMatch = await verifyUserPassword(trimmedPassword, pgUserResult.passwordHash);
+      if (!isMatch) {
+        // Password invalid: return HTTP 401
+        res.status(401).json({ success: false, message: 'E-mail ou senha incorretos.' });
         return;
       }
-    }
-
-    // Auto-create user if brand new email enters
-    if (!userRecord) {
-      const generatedName = normalizedEmail.split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .split(' ')
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ');
-
-      const newId = crypto.randomUUID();
-      const defaultUser: User = {
-        id: newId,
-        name: generatedName || 'Cliente Felicitá',
-        email: normalizedEmail,
-        phone: '(11) 99999-0000',
-        role: 'customer',
-        createdAt: new Date().toISOString()
-      };
-
-      const newCustomer: Customer = {
-        id: newId,
-        name: defaultUser.name,
-        email: normalizedEmail,
-        phone: defaultUser.phone || '',
-        city: 'São Paulo - SP',
-        address: DEFAULT_ADDRESS,
-        ordersCount: 0,
-        totalSpent: 0,
-        isActive: true,
-        createdAt: new Date().toLocaleDateString('pt-BR')
-      };
-
-      if (isPgConnected()) {
-        await pgCreateUser({
-          name: defaultUser.name,
-          email: normalizedEmail,
-          password: password || '123456',
-          phone: defaultUser.phone,
-          address: DEFAULT_ADDRESS
-        });
-      }
-
-      store.users.push({ ...defaultUser, password: password || '', address: DEFAULT_ADDRESS });
-      store.customers.push(newCustomer);
 
       const sessionId = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      if (isPgConnected()) {
-        await pgCreateSession(sessionId, defaultUser.id, expiresAt, {
-          name: defaultUser.name,
-          email: defaultUser.email,
-          role: defaultUser.role
-        });
+
+      const sessionSaved = await pgCreateSession(sessionId, pgUserResult.user.id, expiresAt);
+      if (!sessionSaved) {
+        res.status(500).json({ success: false, message: 'Falha ao registrar sessão no servidor.' });
+        return;
       }
-      store.sessions[sessionId] = { userId: defaultUser.id, expiresAt: expiresAt.getTime() };
+
+      store.sessions[sessionId] = { userId: pgUserResult.user.id, expiresAt: expiresAt.getTime() };
       saveStore(store);
 
-      broadcast('CUSTOMERS_UPDATED', store.customers);
       setAuthCookie(req, res, sessionId);
 
+      const cust = store.customers.find(c => c.email.toLowerCase() === normalizedEmail) || null;
       res.json({
         success: true,
         token: sessionId,
-        user: defaultUser,
-        customer: newCustomer,
-        address: DEFAULT_ADDRESS
+        user: pgUserResult.user,
+        customer: cust,
+        address: pgUserResult.address || cust?.address || DEFAULT_ADDRESS
       });
       return;
     }
 
-    const resolvedAddress = customerRecord?.address || userRecord.address || DEFAULT_ADDRESS;
+    // 2. If PostgreSQL is not connected: query store.users
+    const userRecord = store.users.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (!userRecord || !userRecord.password) {
+      // User does not exist: return HTTP 401 immediately (DO NOT AUTO-CREATE!)
+      res.status(401).json({ success: false, message: 'E-mail ou senha incorretos.' });
+      return;
+    }
+
+    const isMatch = await verifyUserPassword(trimmedPassword, userRecord.password);
+    if (!isMatch) {
+      res.status(401).json({ success: false, message: 'E-mail ou senha incorretos.' });
+      return;
+    }
+
+    // If password was stored as plain string, migrate to bcrypt hash safely
+    if (!userRecord.password.startsWith('$2a$') && !userRecord.password.startsWith('$2b$')) {
+      userRecord.password = await bcrypt.hash(trimmedPassword, 10);
+      saveStore(store);
+    }
+
     const publicUser: User = {
       id: userRecord.id,
       name: userRecord.name,
@@ -592,38 +533,63 @@ async function startServer() {
 
     const sessionId = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    if (isPgConnected()) {
-      await pgCreateSession(sessionId, publicUser.id, expiresAt, {
-        name: publicUser.name,
-        email: publicUser.email,
-        role: publicUser.role
-      });
-    }
     store.sessions[sessionId] = { userId: publicUser.id, expiresAt: expiresAt.getTime() };
     saveStore(store);
 
     setAuthCookie(req, res, sessionId);
 
+    const customerRecord = store.customers.find(c => c.email.toLowerCase() === normalizedEmail);
     res.json({
       success: true,
       token: sessionId,
       user: publicUser,
       customer: customerRecord || null,
-      address: resolvedAddress
+      address: customerRecord?.address || userRecord.address || DEFAULT_ADDRESS
     });
   });
 
-  // 3. Register endpoint (/api/auth/register)
+  // 3. Register endpoint (/api/auth/register) - forces role = 'customer', rejects missing data
   app.post('/api/auth/register', async (req: Request, res: Response) => {
     const { name, email, password, phone, address } = req.body;
-    if (!email || !name) {
-      res.status(400).json({ success: false, message: 'Nome e email são obrigatórios' });
+    if (!name || !email || !password || typeof email !== 'string' || typeof name !== 'string' || typeof password !== 'string') {
+      res.status(400).json({ success: false, message: 'Nome, e-mail e senha são obrigatórios.' });
       return;
     }
 
-    const normalizedEmail = String(email).toLowerCase().trim();
-    const custId = crypto.randomUUID();
+    const normalizedEmail = email.toLowerCase().trim();
+    const trimmedName = name.trim();
+    const trimmedPassword = password.trim();
 
+    if (!normalizedEmail || !trimmedName || !trimmedPassword) {
+      res.status(400).json({ success: false, message: 'Nome, e-mail e senha não podem estar em branco.' });
+      return;
+    }
+
+    if (trimmedPassword.length < 4) {
+      res.status(400).json({ success: false, message: 'A senha deve ter pelo menos 4 caracteres.' });
+      return;
+    }
+
+    // CRITICAL SECURITY: Role is ALWAYS forced to 'customer'. Any attempt to supply 'admin' is ignored!
+    const enforcedRole = 'customer';
+
+    // Verify if user already exists in PostgreSQL
+    if (isPgConnected()) {
+      const existingPg = await pgFindUserByEmail(normalizedEmail);
+      if (existingPg) {
+        res.status(409).json({ success: false, message: 'Este e-mail já está cadastrado. Faça login para continuar.' });
+        return;
+      }
+    }
+
+    // Verify if user already exists in store
+    const existingLocal = store.users.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (existingLocal) {
+      res.status(409).json({ success: false, message: 'Este e-mail já está cadastrado. Faça login para continuar.' });
+      return;
+    }
+
+    const custId = crypto.randomUUID();
     const newAddress: Address = address || {
       id: toValidUuid(`addr-${custId}`),
       title: 'Endereço Principal',
@@ -638,25 +604,26 @@ async function startServer() {
 
     let createdUser: User = {
       id: custId,
-      name: name.trim(),
+      name: trimmedName,
       email: normalizedEmail,
-      phone: phone ? phone.trim() : '(11) 99999-0000',
-      role: 'customer',
+      phone: phone ? String(phone).trim() : '(11) 99999-0000',
+      role: enforcedRole,
       createdAt: new Date().toISOString()
     };
 
-    // If PostgreSQL connected, insert directly into database
+    const passwordHash = await bcrypt.hash(trimmedPassword, 10);
+
     if (isPgConnected()) {
       const pgRes = await pgCreateUser({
-        name: name.trim(),
+        name: trimmedName,
         email: normalizedEmail,
-        password: password || '123456',
-        phone: phone ? phone.trim() : '(11) 99999-0000',
-        role: 'customer',
+        password: trimmedPassword,
+        phone: createdUser.phone,
+        role: enforcedRole,
         address: newAddress
       });
       if (pgRes) {
-        createdUser = pgRes.user;
+        createdUser = { ...pgRes.user, role: 'customer' };
       }
     }
 
@@ -673,37 +640,14 @@ async function startServer() {
       createdAt: new Date().toLocaleDateString('pt-BR')
     };
 
-    // Update in-memory / JSON store
-    const existingUserIndex = store.users.findIndex(u => u.email.toLowerCase() === normalizedEmail);
-    if (existingUserIndex >= 0) {
-      store.users[existingUserIndex] = {
-        ...store.users[existingUserIndex],
-        name: createdUser.name,
-        phone: createdUser.phone,
-        password: password || store.users[existingUserIndex].password,
-        address: newAddress
-      };
-    } else {
-      store.users.push({ ...createdUser, password, address: newAddress });
-    }
+    store.users.push({ ...createdUser, password: passwordHash, address: newAddress });
+    store.customers.unshift(newCust);
 
-    const existingCustIndex = store.customers.findIndex(c => c.email.toLowerCase() === normalizedEmail);
-    if (existingCustIndex >= 0) {
-      store.customers[existingCustIndex] = newCust;
-    } else {
-      store.customers.unshift(newCust);
-    }
-
-    // Create session
     const sessionId = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     if (isPgConnected()) {
-      await pgCreateSession(sessionId, createdUser.id, expiresAt, {
-        name: createdUser.name,
-        email: createdUser.email,
-        role: createdUser.role
-      });
+      await pgCreateSession(sessionId, createdUser.id, expiresAt);
     }
     store.sessions[sessionId] = { userId: createdUser.id, expiresAt: expiresAt.getTime() };
     saveStore(store);
@@ -711,7 +655,7 @@ async function startServer() {
     broadcast('CUSTOMERS_UPDATED', store.customers);
     setAuthCookie(req, res, sessionId);
 
-    res.json({
+    res.status(201).json({
       success: true,
       token: sessionId,
       user: createdUser,
@@ -774,7 +718,9 @@ async function startServer() {
   // ============================================================================
   // ORDERS API
   // ============================================================================
-  app.post('/api/orders', async (req: Request, res: Response) => {
+  // ORDERS API (Protected)
+  // ============================================================================
+  app.post('/api/orders', requireAuth, async (req: Request, res: Response) => {
     const { order } = req.body;
     if (!order || !order.id) {
       res.status(400).json({ success: false, message: 'Dados do pedido inválidos' });
@@ -809,7 +755,7 @@ async function startServer() {
     res.json({ success: true, order, orders: store.orders });
   });
 
-  app.patch('/api/orders/:id/status', async (req: Request, res: Response) => {
+  app.patch('/api/orders/:id/status', requireAdmin, async (req: Request, res: Response) => {
     const orderId = req.params.id;
     const { status } = req.body as { status: OrderStatus };
 
@@ -827,7 +773,7 @@ async function startServer() {
     res.json({ success: true, orders: store.orders });
   });
 
-  app.patch('/api/orders/:id/courier', (req: Request, res: Response) => {
+  app.patch('/api/orders/:id/courier', requireAdmin, (req: Request, res: Response) => {
     const orderId = req.params.id;
     const { courierName, courierPhone } = req.body;
 
@@ -854,7 +800,7 @@ async function startServer() {
     res.json({ success: true, orders: store.orders });
   });
 
-  app.delete('/api/orders/:id', async (req: Request, res: Response) => {
+  app.delete('/api/orders/:id', requireAdmin, async (req: Request, res: Response) => {
     const orderId = req.params.id;
     if (isPgConnected()) {
       await pgDeleteOrder(orderId);
@@ -865,7 +811,7 @@ async function startServer() {
     res.json({ success: true, orders: store.orders });
   });
 
-  app.delete('/api/orders', (_req: Request, res: Response) => {
+  app.delete('/api/orders', requireAdmin, (_req: Request, res: Response) => {
     store.orders = [];
     saveStore(store);
     broadcast('ORDERS_UPDATED', store.orders);
@@ -873,9 +819,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // PRODUCTS API
+  // PRODUCTS API (Admin Protected)
   // ============================================================================
-  app.post('/api/products', async (req: Request, res: Response) => {
+  app.post('/api/products', requireAdmin, async (req: Request, res: Response) => {
     const product = req.body as Product;
     if (!product || !product.id || !product.name) {
       res.status(400).json({ success: false, message: 'Dados do produto inválidos' });
@@ -900,7 +846,7 @@ async function startServer() {
     res.json({ success: true, products: store.products, categories: store.categories });
   });
 
-  app.put('/api/products/:id', async (req: Request, res: Response) => {
+  app.put('/api/products/:id', requireAdmin, async (req: Request, res: Response) => {
     const productId = req.params.id;
     const updated = req.body as Product;
 
@@ -915,7 +861,7 @@ async function startServer() {
     res.json({ success: true, products: store.products });
   });
 
-  app.delete('/api/products/:id', async (req: Request, res: Response) => {
+  app.delete('/api/products/:id', requireAdmin, async (req: Request, res: Response) => {
     const productId = req.params.id;
     const prod = store.products.find(p => p.id === productId);
 
@@ -938,7 +884,7 @@ async function startServer() {
     res.json({ success: true, products: store.products, categories: store.categories });
   });
 
-  app.patch('/api/products/:id/stock', async (req: Request, res: Response) => {
+  app.patch('/api/products/:id/stock', requireAdmin, async (req: Request, res: Response) => {
     const productId = req.params.id;
     const { quantity, delta } = req.body;
 
@@ -968,9 +914,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // CATEGORIES API
+  // CATEGORIES API (Admin Protected)
   // ============================================================================
-  app.post('/api/categories', (req: Request, res: Response) => {
+  app.post('/api/categories', requireAdmin, (req: Request, res: Response) => {
     const newCat = req.body as Category;
     store.categories = [...store.categories, newCat];
     saveStore(store);
@@ -978,7 +924,7 @@ async function startServer() {
     res.json({ success: true, categories: store.categories });
   });
 
-  app.delete('/api/categories/:id', (req: Request, res: Response) => {
+  app.delete('/api/categories/:id', requireAdmin, (req: Request, res: Response) => {
     const catId = req.params.id;
     store.categories = store.categories.filter(c => c.id !== catId);
     saveStore(store);
@@ -987,9 +933,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // ADDONS API
+  // ADDONS API (Admin Protected)
   // ============================================================================
-  app.post('/api/addons', (req: Request, res: Response) => {
+  app.post('/api/addons', requireAdmin, (req: Request, res: Response) => {
     const addon = req.body as ProductAddon;
     store.addons = [...store.addons, addon];
     saveStore(store);
@@ -997,7 +943,7 @@ async function startServer() {
     res.json({ success: true, addons: store.addons });
   });
 
-  app.delete('/api/addons/:id', (req: Request, res: Response) => {
+  app.delete('/api/addons/:id', requireAdmin, (req: Request, res: Response) => {
     const addonId = req.params.id;
     store.addons = store.addons.filter(a => a.id !== addonId);
     saveStore(store);
@@ -1006,16 +952,16 @@ async function startServer() {
   });
 
   // ============================================================================
-  // STORE SETTINGS & REVENUE
+  // STORE SETTINGS & REVENUE (Admin Protected)
   // ============================================================================
-  app.put('/api/store-settings', (req: Request, res: Response) => {
+  app.put('/api/store-settings', requireAdmin, (req: Request, res: Response) => {
     store.storeSettings = req.body as StoreSettings;
     saveStore(store);
     broadcast('STORE_SETTINGS_UPDATED', store.storeSettings);
     res.json({ success: true, storeSettings: store.storeSettings });
   });
 
-  app.post('/api/revenue/reset', (req: Request, res: Response) => {
+  app.post('/api/revenue/reset', requireAdmin, (req: Request, res: Response) => {
     const { isRevenueReset } = req.body;
     store.isRevenueReset = Boolean(isRevenueReset);
     saveStore(store);
@@ -1024,9 +970,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // CUSTOMERS API
+  // CUSTOMERS API (Admin Protected)
   // ============================================================================
-  app.delete('/api/customers/:id', (req: Request, res: Response) => {
+  app.delete('/api/customers/:id', requireAdmin, (req: Request, res: Response) => {
     const custId = req.params.id;
     store.customers = store.customers.filter(c => c.id !== custId);
     saveStore(store);

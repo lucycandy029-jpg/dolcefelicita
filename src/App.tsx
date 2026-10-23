@@ -734,7 +734,6 @@ export default function App() {
           <AuthScreen
             customers={customers}
             onLoginSuccess={handleLoginSuccess}
-            onContinueAsGuest={() => setCurrentTab('cardapio')}
           />
         )}
 

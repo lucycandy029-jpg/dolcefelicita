@@ -26,13 +26,11 @@ import { api } from '../services/syncService';
 interface AuthScreenProps {
   customers: Customer[];
   onLoginSuccess: (user: User, newCustomerProfile?: Customer, newAddress?: Address) => void;
-  onContinueAsGuest?: () => void;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   customers,
-  onLoginSuccess,
-  onContinueAsGuest
+  onLoginSuccess
 }) => {
   const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
   
@@ -61,16 +59,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [socialName, setSocialName] = useState<string>('');
   const [socialEmail, setSocialEmail] = useState<string>('');
 
-  // Dedicated admin credentials
-  const ADMIN_EMAILS = [
-    'admin@felicitadoces.com.br',
-    'admin@lucycandy.com',
-    'admin@admin.com'
-  ];
-  const ADMIN_PASSWORDS = ['admin', 'admin123', 'admin2024', '123456'];
-
   const normalizedEmail = email.toLowerCase().trim();
-  const isAdminEmail = ADMIN_EMAILS.includes(normalizedEmail) || normalizedEmail.startsWith('admin@');
+  const isAdminEmail = normalizedEmail === 'admin@felicitadoces.com.br' || normalizedEmail === 'admin@felicita.com';
   const matchingCustomer = customers.find(c => c.email.toLowerCase() === normalizedEmail);
 
   // Address string for dynamic real-time map preview
@@ -128,32 +118,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    // 1. Check if it is the Administrator
-    if (isAdminEmail) {
-      if (!ADMIN_PASSWORDS.includes(password) && password !== 'admin') {
-        setFormError('Senha de administrador incorreta.');
-        return;
-      }
-
-      try {
-        const res = await api.login(normalizedEmail, password);
-        if (res && res.success && res.user) {
-          onLoginSuccess(res.user, undefined, res.address);
-          return;
-        } else if (res && res.message) {
-          setFormError(res.message);
-          return;
-        } else {
-          setFormError('Falha na autenticação do administrador no servidor.');
-          return;
-        }
-      } catch (e: any) {
-        setFormError(e?.message || 'Erro de conexão com o servidor ao autenticar.');
-        return;
-      }
-    }
-
-    // 2. Register Mode: Create brand new customer profile with complete delivery address and map location
+    // 1. Register Mode: Create brand new customer profile with complete delivery address and map location
     if (isRegisterMode) {
       if (!name.trim()) {
         setFormError('Por favor informe seu nome completo.');
@@ -205,7 +170,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       }
     }
 
-    // 3. Login Mode
+    // 2. Login Mode: Authenticate against server database
     try {
       const res = await api.login(normalizedEmail, password);
       if (res && res.success && res.user) {
@@ -227,64 +192,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   const handleSocialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!socialEmail || !socialName) return;
-
-    const emailNorm = socialEmail.toLowerCase().trim();
-    try {
-      const res = await api.login(emailNorm, 'social_login');
-      if (res && res.success && res.user) {
-        onLoginSuccess(res.user, res.customer, res.address);
-        return;
-      }
-    } catch (err) {}
-
-    const existing = customers.find(c => c.email.toLowerCase() === emailNorm);
-
-    if (existing) {
-      onLoginSuccess({
-        id: existing.id,
-        name: existing.name,
-        email: existing.email,
-        phone: existing.phone,
-        role: 'customer',
-        createdAt: existing.createdAt
-      }, existing, existing.address);
-    } else {
-      const defAddr: Address = {
-        id: 'addr-' + Date.now(),
-        title: 'Endereço Principal',
-        postalCode: '01310-100',
-        street: 'Av. Paulista',
-        number: '1000',
-        complement: '',
-        neighborhood: 'Bela Vista',
-        city: 'São Paulo',
-        state: 'SP',
-        isDefault: true
-      };
-
-      const newCust: Customer = {
-        id: 'cust-' + Date.now(),
-        name: socialName.trim(),
-        email: emailNorm,
-        phone: '(11) 99999-0000',
-        city: 'São Paulo - SP',
-        address: defAddr,
-        ordersCount: 0,
-        totalSpent: 0,
-        isActive: true,
-        createdAt: new Date().toLocaleDateString('pt-BR')
-      };
-      onLoginSuccess({
-        id: newCust.id,
-        name: newCust.name,
-        email: newCust.email,
-        phone: newCust.phone,
-        role: 'customer',
-        createdAt: new Date().toISOString()
-      }, newCust, defAddr);
-    }
     setSocialModalOpen(null);
+    setFormError('Login social temporariamente desabilitado. Por favor, utilize seu e-mail e senha cadastrados.');
   };
 
   return (
@@ -791,18 +700,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </button>
             </div>
 
-            {onContinueAsGuest && (
-              <div className="text-center mt-4">
-                <button
-                  type="button"
-                  onClick={onContinueAsGuest}
-                  className="inline-flex items-center gap-1.5 text-xs text-[#7f5347] hover:text-[#1d1b19] font-semibold py-1 px-3 rounded-full hover:bg-[#f8f3ee] transition-colors cursor-pointer"
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Continuar navegando sem login</span>
-                </button>
-              </div>
-            )}
+
 
             <div className="mt-5 pt-4 bg-[#fcf9f6] -mx-7 -mb-7 sm:-mx-9 sm:-mb-9 px-6 py-4 rounded-b-3xl border-t border-[#f2ede8] flex flex-col items-center gap-1 text-center">
               <p className="text-xs text-[#554245]">

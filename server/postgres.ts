@@ -145,7 +145,7 @@ async function ensureSessionTable() {
               'fa881076-d8ce-47c8-a7e3-f7d82a1700ad',
               'Administrador Felicitá',
               'admin@felicitadoces.com.br',
-              '$2a$12$e8x5aN8H7qDqG8DkM5Z.b.4e99fE9J9w8H8fD.b7yO1K9zL1x0A6q',
+              '$2b$10$ouj6JINCYxtbTZ.UbGg0b.EkHSSlsAkX8qj../A0UO1anjHSZWT0a',
               '(11) 98765-4321',
               TRUE
             ) ON CONFLICT DO NOTHING;
@@ -443,43 +443,13 @@ export async function pgCreateSession(
         if (emailCheck.rows.length > 0) {
           targetUserId = emailCheck.rows[0].id;
         } else {
-          // 3. Insert user placeholder so foreign key constraint is satisfied
-          const defaultHash = '$2a$12$e8x5aN8H7qDqG8DkM5Z.b.4e99fE9J9w8H8fD.b7yO1K9zL1x0A6q';
-          await pool.query(
-            `INSERT INTO users (id, name, email, password_hash, phone, is_active)
-             VALUES ($1, $2, $3, $4, NULL, TRUE)
-             ON CONFLICT (id) DO NOTHING;`,
-            [
-              uuid,
-              userFallback?.name || 'Usuário Felicitá',
-              emailToSearch.toLowerCase().trim(),
-              defaultHash
-            ]
-          );
-          if (userFallback?.role) {
-            try {
-              await pool.query(
-                `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;`,
-                [uuid, userFallback.role]
-              );
-            } catch (e) {}
-          }
-          targetUserId = uuid;
+          // User not found in users table — do NOT create fake users!
+          console.warn(`[PostgreSQL] Cannot create session: user with email '${emailToSearch}' does not exist.`);
+          return false;
         }
       } else {
-        // Fallback: check if ANY user exists or create a placeholder user for this UUID
-        const fallbackCheck = await pool.query('SELECT id FROM users LIMIT 1;');
-        if (fallbackCheck.rows.length > 0) {
-          targetUserId = fallbackCheck.rows[0].id;
-        } else {
-          await pool.query(
-            `INSERT INTO users (id, name, email, password_hash, phone, is_active)
-             VALUES ($1, 'Administrador Felicitá', 'admin@felicitadoces.com.br', '$2a$12$e8x5aN8H7qDqG8DkM5Z.b.4e99fE9J9w8H8fD.b7yO1K9zL1x0A6q', NULL, TRUE)
-             ON CONFLICT (id) DO NOTHING;`,
-            [uuid]
-          );
-          targetUserId = uuid;
-        }
+        console.warn(`[PostgreSQL] Cannot create session: user ID ${uuid} does not exist.`);
+        return false;
       }
     }
 
