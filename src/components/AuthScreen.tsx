@@ -136,7 +136,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       }
 
       try {
-        await api.login(normalizedEmail, password);
+        const res = await api.login(normalizedEmail, password);
+        if (res && res.success && res.user) {
+          onLoginSuccess(res.user, undefined, res.address);
+          return;
+        } else if (res && res.message) {
+          setFormError(res.message);
+          return;
+        }
       } catch (e) {}
 
       const adminUser: User = {
@@ -189,9 +196,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         if (res && res.success && res.user) {
           onLoginSuccess(res.user, res.customer, res.address || newAddress);
           return;
+        } else if (res && res.message) {
+          setFormError(res.message);
+          return;
         }
       } catch (err) {
-        console.warn('Server registration call fallback to local:', err);
+        console.warn('Server registration call error:', err);
       }
 
       const newCust: Customer = {
@@ -231,7 +241,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         return;
       }
     } catch (err) {
-      console.warn('Server login call fallback to local:', err);
+      console.warn('Server login error:', err);
     }
 
     // Local fallback if offline:

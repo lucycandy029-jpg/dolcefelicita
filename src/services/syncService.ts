@@ -157,7 +157,16 @@ export function initSSEConnection(onFullStateRefresh?: (state: any) => void): ()
 
 export const api = {
   async getState() {
-    const res = await fetch('/api/state');
+    const res = await fetch('/api/state', {
+      credentials: 'include'
+    });
+    return res.json();
+  },
+
+  async getMe() {
+    const res = await fetch('/api/auth/me', {
+      credentials: 'include'
+    });
     return res.json();
   },
 
@@ -165,6 +174,7 @@ export const api = {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password })
     });
     return res.json();
@@ -174,13 +184,24 @@ export const api = {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data)
     });
     return res.json();
   },
 
+  async logout() {
+    const res = await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include'
+    });
+    return res.json();
+  },
+
   async getCustomerProfile(email: string) {
-    const res = await fetch(`/api/customers/profile?email=${encodeURIComponent(email)}`);
+    const res = await fetch(`/api/customers/profile?email=${encodeURIComponent(email)}`, {
+      credentials: 'include'
+    });
     return res.json();
   },
 
@@ -188,6 +209,7 @@ export const api = {
     const res = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ order })
     });
     return res.json();
@@ -197,6 +219,7 @@ export const api = {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ status })
     });
     return res.json();
@@ -206,6 +229,7 @@ export const api = {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/courier`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ courierName, courierPhone })
     });
     return res.json();
@@ -213,14 +237,16 @@ export const api = {
 
   async deleteOrder(orderId: string) {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      credentials: 'include'
     });
     return res.json();
   },
 
   async clearAllOrders() {
     const res = await fetch('/api/orders', {
-      method: 'DELETE'
+      method: 'DELETE',
+      credentials: 'include'
     });
     return res.json();
   },
@@ -229,6 +255,7 @@ export const api = {
     const res = await fetch('/api/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(product)
     });
     return res.json();
@@ -238,6 +265,7 @@ export const api = {
     const res = await fetch(`/api/products/${encodeURIComponent(product.id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(product)
     });
     return res.json();
@@ -245,7 +273,8 @@ export const api = {
 
   async deleteProduct(productId: string) {
     const res = await fetch(`/api/products/${encodeURIComponent(productId)}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      credentials: 'include'
     });
     return res.json();
   },
@@ -254,6 +283,7 @@ export const api = {
     const res = await fetch(`/api/products/${encodeURIComponent(productId)}/stock`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ quantity, delta })
     });
     return res.json();
@@ -263,6 +293,7 @@ export const api = {
     const res = await fetch('/api/categories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(category)
     });
     return res.json();
@@ -270,7 +301,8 @@ export const api = {
 
   async deleteCategory(categoryId: string) {
     const res = await fetch(`/api/categories/${encodeURIComponent(categoryId)}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      credentials: 'include'
     });
     return res.json();
   },
@@ -279,6 +311,7 @@ export const api = {
     const res = await fetch('/api/addons', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(addon)
     });
     return res.json();
@@ -286,7 +319,8 @@ export const api = {
 
   async deleteAddon(addonId: string) {
     const res = await fetch(`/api/addons/${encodeURIComponent(addonId)}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      credentials: 'include'
     });
     return res.json();
   },
@@ -295,6 +329,7 @@ export const api = {
     const res = await fetch('/api/store-settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(settings)
     });
     return res.json();
@@ -304,6 +339,7 @@ export const api = {
     const res = await fetch('/api/revenue/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ isRevenueReset })
     });
     return res.json();
@@ -311,7 +347,8 @@ export const api = {
 
   async deleteCustomer(customerId: string) {
     const res = await fetch(`/api/customers/${encodeURIComponent(customerId)}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      credentials: 'include'
     });
     return res.json();
   }

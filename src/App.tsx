@@ -33,141 +33,42 @@ import { ShoppingBag, ArrowRight } from 'lucide-react';
 import { subscribeToSync, broadcastSync, api, initSSEConnection } from './services/syncService';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_current_user');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.email) {
-          return parsed.role === 'admin' ? 'admin' : 'cardapio';
-        }
-      }
-    } catch (e) {}
-    return 'auth';
-  });
-  // Categories - persisted in localStorage
-  const [categories, setCategories] = useState<Category[]>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_categories_list');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_CATEGORIES;
-  });
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+  const [currentTab, setCurrentTab] = useState<string>('auth');
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('felicita_categories_list', JSON.stringify(categories));
-    } catch (e) {}
-  }, [categories]);
+  // Categories - loaded from server/PostgreSQL
+  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
 
-  // Products - persisted in localStorage (deleted items stay deleted on reload)
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_products_list');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_PRODUCTS;
+  // Products - loaded from server/PostgreSQL
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+
+  // Addons - loaded from server/PostgreSQL
+  const [addons, setAddons] = useState<ProductAddon[]>(INITIAL_GLOBAL_ADDONS);
+
+  // Store Settings - loaded from server/PostgreSQL
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(DEFAULT_STORE_SETTINGS);
+
+  // Customers list - loaded from server/PostgreSQL
+  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
+
+  // Current logged in user (server verified via session cookie)
+  const [currentUser, setCurrentUser] = useState<User>({
+    id: '',
+    name: 'Visitante',
+    email: '',
+    role: 'customer',
+    createdAt: ''
   });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('felicita_products_list', JSON.stringify(products));
-    } catch (e) {}
-  }, [products]);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
 
-  // Addons - persisted in localStorage
-  const [addons, setAddons] = useState<ProductAddon[]>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_addons_list');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_GLOBAL_ADDONS;
-  });
+  // Active delivery address
+  const [activeAddress, setActiveAddress] = useState<Address | null>(null);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('felicita_addons_list', JSON.stringify(addons));
-    } catch (e) {}
-  }, [addons]);
-
-  // Store Settings - persisted in localStorage
-  const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_store_settings');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return DEFAULT_STORE_SETTINGS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('felicita_store_settings', JSON.stringify(storeSettings));
-    } catch (e) {}
-  }, [storeSettings]);
-
-  // Persistent customers list linked to Admin Panel
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_customers_list');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_CUSTOMERS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('felicita_customers_list', JSON.stringify(customers));
-    } catch (e) {}
-  }, [customers]);
-
-  // Current logged in user (or guest). Never default to Mariana if not logged in.
-  const [currentUser, setCurrentUser] = useState<User>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_current_user');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.email) return parsed;
-      }
-    } catch (e) {}
-    return {
-      id: '',
-      name: 'Visitante',
-      email: '',
-      role: 'customer',
-      createdAt: ''
-    };
-  });
-
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_current_user');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return Boolean(parsed && parsed.email);
-      }
-    } catch (e) {}
-    return false;
-  });
-
-  // Active delivery address: only present if user is logged in with address
-  const [activeAddress, setActiveAddress] = useState<Address | null>(() => {
-    try {
-      const savedUser = localStorage.getItem('felicita_current_user');
-      if (savedUser) {
-        const parsedUser = JSON.parse(savedUser);
-        if (parsedUser && parsedUser.email) {
-          const savedAddr = localStorage.getItem('felicita_active_address');
-          if (savedAddr) return JSON.parse(savedAddr);
-        }
-      }
-    } catch (e) {}
-    return null;
-  });
-
-  // Cart items - persisted in session
+  // Cart items
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
-      const savedCart = localStorage.getItem('felicita_cart_items');
+      const savedCart = sessionStorage.getItem('felicita_cart_items');
       if (savedCart) return JSON.parse(savedCart);
     } catch (e) {}
     return [
@@ -188,18 +89,44 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('felicita_cart_items', JSON.stringify(cartItems));
+      sessionStorage.setItem('felicita_cart_items', JSON.stringify(cartItems));
     } catch (e) {}
   }, [cartItems]);
 
-  // Orders list - persisted in localStorage
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const saved = localStorage.getItem('felicita_orders_list');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_ORDERS;
-  });
+  // Initial session verification across browsers via HttpOnly cookie
+  useEffect(() => {
+    let isMounted = true;
+
+    api.getMe().then(res => {
+      if (!isMounted) return;
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        setIsLoggedIn(true);
+        if (res.address) {
+          setActiveAddress(res.address);
+        }
+        setCurrentTab(res.user.role === 'admin' ? 'admin' : 'cardapio');
+      } else {
+        setIsLoggedIn(false);
+        setCurrentTab('auth');
+      }
+    }).catch(err => {
+      console.warn('Session verification error:', err);
+      if (isMounted) {
+        setIsLoggedIn(false);
+        setCurrentTab('auth');
+      }
+    }).finally(() => {
+      if (isMounted) setIsAuthChecking(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Orders list - loaded from server/PostgreSQL
+  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
 
   useEffect(() => {
     try {
@@ -609,7 +536,10 @@ export default function App() {
     api.updateStoreSettings(newSettings).catch(() => {});
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (e) {}
     setIsLoggedIn(false);
     setCurrentUser({
       id: '',
@@ -621,9 +551,9 @@ export default function App() {
     setActiveAddress(null);
     setCartItems([]);
     try {
+      sessionStorage.removeItem('felicita_cart_items');
       localStorage.removeItem('felicita_current_user');
       localStorage.removeItem('felicita_active_address');
-      localStorage.removeItem('felicita_cart_items');
     } catch (e) {}
     setCurrentTab('auth');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -632,16 +562,10 @@ export default function App() {
   const handleLoginSuccess = (user: User, newCustomerProfile?: Customer, newAddress?: Address) => {
     setCurrentUser(user);
     setIsLoggedIn(true);
-    try {
-      localStorage.setItem('felicita_current_user', JSON.stringify(user));
-    } catch (e) {}
 
     // If new address was entered during registration or customer already had one, update active address
     const resolvedAddress = newAddress || newCustomerProfile?.address || (customers.find(c => c.email.toLowerCase() === user.email.toLowerCase())?.address) || DEFAULT_ADDRESS;
     setActiveAddress(resolvedAddress);
-    try {
-      localStorage.setItem('felicita_active_address', JSON.stringify(resolvedAddress));
-    } catch (e) {}
 
     // Link login to customer profile and ensure new profile appears in the Admin Panel
     if (user.role === 'customer' && user.email) {
@@ -716,6 +640,23 @@ export default function App() {
     : orders;
   const activeCustomerOrder = customerOrders[0] || (currentUser.role === 'admin' ? orders[0] : null);
   const pastCustomerOrders = customerOrders.slice(1);
+
+  // Tela de verificação de autenticação inicial no servidor
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-[#fef8f3] text-[#1d1b19] flex flex-col items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-4 animate-pulse">
+          <div className="w-16 h-16 rounded-3xl bg-amber-600 flex items-center justify-center shadow-lg shadow-amber-900/15">
+            <ShoppingBag className="w-8 h-8 text-white" />
+          </div>
+          <div className="text-center">
+            <h2 className="font-serif text-2xl font-bold text-amber-950 tracking-tight">Dolce Felicitá</h2>
+            <p className="text-sm text-stone-500 mt-1">Sincronizando com o servidor PostgreSQL...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Ao iniciar o sistema sem estar logado em nenhuma conta, abre APENAS a tela de login
   if (!isLoggedIn) {
