@@ -153,11 +153,45 @@ export function initSSEConnection(onFullStateRefresh?: (state: any) => void): ()
 
 // ==============================================================================
 // HTTP API Client for Server Authoritative Actions
+// Dual-Mode Auth: Supports HttpOnly Cookies + Authorization: Bearer <sessionId>
 // ==============================================================================
+
+const TOKEN_KEY = 'felicita_auth_token';
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null) {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      sessionStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+    }
+  } catch (e) {}
+}
+
+function getAuthHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    headers['X-Session-ID'] = token;
+  }
+  return headers;
+}
 
 export const api = {
   async getState() {
     const res = await fetch('/api/state', {
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();
@@ -165,41 +199,62 @@ export const api = {
 
   async getMe() {
     const res = await fetch('/api/auth/me', {
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
-    return res.json();
+    const data = await res.json();
+    if (data && data.success && data.token) {
+      setAuthToken(data.token);
+    } else if (data && !data.success) {
+      setAuthToken(null);
+    }
+    return data;
   },
 
   async login(email: string, password?: string) {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify({ email, password })
     });
-    return res.json();
+    const data = await res.json();
+    if (data && data.success && data.token) {
+      setAuthToken(data.token);
+    }
+    return data;
   },
 
   async register(data: { name: string; email: string; password?: string; phone?: string; address?: Address }) {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify(data)
     });
-    return res.json();
+    const dataRes = await res.json();
+    if (dataRes && dataRes.success && dataRes.token) {
+      setAuthToken(dataRes.token);
+    }
+    return dataRes;
   },
 
   async logout() {
-    const res = await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include'
-    });
-    return res.json();
+    try {
+      const res = await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+      return await res.json();
+    } finally {
+      setAuthToken(null);
+    }
   },
 
   async getCustomerProfile(email: string) {
     const res = await fetch(`/api/customers/profile?email=${encodeURIComponent(email)}`, {
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();
@@ -208,7 +263,7 @@ export const api = {
   async createOrder(order: Order) {
     const res = await fetch('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify({ order })
     });
@@ -218,7 +273,7 @@ export const api = {
   async updateOrderStatus(orderId: string, status: OrderStatus) {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify({ status })
     });
@@ -228,7 +283,7 @@ export const api = {
   async updateOrderCourier(orderId: string, courierName: string, courierPhone: string) {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/courier`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify({ courierName, courierPhone })
     });
@@ -238,6 +293,7 @@ export const api = {
   async deleteOrder(orderId: string) {
     const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();
@@ -246,6 +302,7 @@ export const api = {
   async clearAllOrders() {
     const res = await fetch('/api/orders', {
       method: 'DELETE',
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();
@@ -254,7 +311,7 @@ export const api = {
   async addProduct(product: Product) {
     const res = await fetch('/api/products', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify(product)
     });
@@ -264,7 +321,7 @@ export const api = {
   async updateProduct(product: Product) {
     const res = await fetch(`/api/products/${encodeURIComponent(product.id)}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify(product)
     });
@@ -274,6 +331,7 @@ export const api = {
   async deleteProduct(productId: string) {
     const res = await fetch(`/api/products/${encodeURIComponent(productId)}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();
@@ -282,7 +340,7 @@ export const api = {
   async setProductStock(productId: string, quantity?: number, delta?: number) {
     const res = await fetch(`/api/products/${encodeURIComponent(productId)}/stock`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify({ quantity, delta })
     });
@@ -292,7 +350,7 @@ export const api = {
   async addCategory(category: Category) {
     const res = await fetch('/api/categories', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify(category)
     });
@@ -302,6 +360,7 @@ export const api = {
   async deleteCategory(categoryId: string) {
     const res = await fetch(`/api/categories/${encodeURIComponent(categoryId)}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();
@@ -310,7 +369,7 @@ export const api = {
   async addAddon(addon: ProductAddon) {
     const res = await fetch('/api/addons', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify(addon)
     });
@@ -320,6 +379,7 @@ export const api = {
   async deleteAddon(addonId: string) {
     const res = await fetch(`/api/addons/${encodeURIComponent(addonId)}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();
@@ -328,7 +388,7 @@ export const api = {
   async updateStoreSettings(settings: StoreSettings) {
     const res = await fetch('/api/store-settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify(settings)
     });
@@ -338,7 +398,7 @@ export const api = {
   async setRevenueReset(isRevenueReset: boolean) {
     const res = await fetch('/api/revenue/reset', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       credentials: 'include',
       body: JSON.stringify({ isRevenueReset })
     });
@@ -348,6 +408,7 @@ export const api = {
   async deleteCustomer(customerId: string) {
     const res = await fetch(`/api/customers/${encodeURIComponent(customerId)}`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
       credentials: 'include'
     });
     return res.json();

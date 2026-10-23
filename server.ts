@@ -158,21 +158,42 @@ function saveStore(data: StoreState) {
   }
 }
 
-// Cookie helper
+// Cookie & Session identifier helper
+function getSessionIdFromRequest(req: Request): string | undefined {
+  if (req.cookies && req.cookies.felicita_session) {
+    return req.cookies.felicita_session;
+  }
+  if (req.signedCookies && req.signedCookies.felicita_session) {
+    return req.signedCookies.felicita_session;
+  }
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  const sessionHeader = req.headers['x-session-id'];
+  if (sessionHeader) {
+    return String(sessionHeader).trim();
+  }
+  return undefined;
+}
+
 function setAuthCookie(req: Request, res: Response, sessionId: string) {
-  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
+  const isHttps = Boolean(req.secure || req.headers['x-forwarded-proto'] === 'https');
   res.cookie('felicita_session', sessionId, {
     httpOnly: true,
     secure: isHttps,
-    sameSite: 'lax',
+    sameSite: isHttps ? 'none' : 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     path: '/'
   });
 }
 
-function clearAuthCookie(res: Response) {
+function clearAuthCookie(req: Request, res: Response) {
+  const isHttps = Boolean(req.secure || req.headers['x-forwarded-proto'] === 'https');
   res.clearCookie('felicita_session', {
     httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
     path: '/'
   });
 }
@@ -262,6 +283,7 @@ async function startServer() {
   }
 
   const app = express();
+  app.set('trust proxy', 1);
 
   app.use(express.json({ limit: '15mb' }));
   app.use(express.urlencoded({ extended: true, limit: '15mb' }));
@@ -277,7 +299,7 @@ async function startServer() {
     }
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie, X-Session-ID');
     if (req.method === 'OPTIONS') {
       res.sendStatus(200);
       return;
@@ -330,7 +352,7 @@ async function startServer() {
 
   // 1. Session verification (/api/auth/me) - called on app load by any browser
   app.get('/api/auth/me', async (req: Request, res: Response) => {
-    const sessionId = req.cookies.felicita_session || req.signedCookies.felicita_session;
+    const sessionId = getSessionIdFromRequest(req);
 
     if (!sessionId) {
       res.json({ success: false, user: null, message: 'Nenhuma sessão ativa.' });
@@ -345,6 +367,7 @@ async function startServer() {
         const cust = store.customers.find(c => c.email.toLowerCase() === pgSession.user.email.toLowerCase()) || null;
         res.json({
           success: true,
+          token: sessionId,
           user: pgSession.user,
           customer: cust,
           address: pgSession.address || cust?.address || DEFAULT_ADDRESS
@@ -361,6 +384,7 @@ async function startServer() {
         const cust = store.customers.find(c => c.email.toLowerCase() === user.email.toLowerCase()) || null;
         res.json({
           success: true,
+          token: sessionId,
           user: {
             id: user.id,
             name: user.name,
@@ -377,7 +401,7 @@ async function startServer() {
     }
 
     // Session expired or not found
-    clearAuthCookie(res);
+    clearAuthCookie(req, res);
     res.json({ success: false, user: null, message: 'Sessão expirada.' });
   });
 
@@ -420,13 +444,17 @@ async function startServer() {
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       if (isPgConnected()) {
-        await pgCreateSession(sessionId, adminUser.id, expiresAt);
+        await pgCreateSession(sessionId, adminUser.id, expiresAt, {
+          name: adminUser.name,
+          email: adminUser.email,
+          role: adminUser.role
+        });
       }
       store.sessions[sessionId] = { userId: adminUser.id, expiresAt: expiresAt.getTime() };
       saveStore(store);
 
       setAuthCookie(req, res, sessionId);
-      res.json({ success: true, user: adminUser, address: DEFAULT_ADDRESS });
+      res.json({ success: true, token: sessionId, user: adminUser, address: DEFAULT_ADDRESS });
       return;
     }
 
@@ -448,7 +476,11 @@ async function startServer() {
 
         const sessionId = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await pgCreateSession(sessionId, pgUserResult.user.id, expiresAt);
+        await pgCreateSession(sessionId, pgUserResult.user.id, expiresAt, {
+          name: pgUserResult.user.name,
+          email: pgUserResult.user.email,
+          role: pgUserResult.user.role
+        });
 
         store.sessions[sessionId] = { userId: pgUserResult.user.id, expiresAt: expiresAt.getTime() };
         saveStore(store);
@@ -458,6 +490,7 @@ async function startServer() {
         const cust = store.customers.find(c => c.email.toLowerCase() === normalizedEmail) || null;
         res.json({
           success: true,
+          token: sessionId,
           user: pgUserResult.user,
           customer: cust,
           address: pgUserResult.address || cust?.address || DEFAULT_ADDRESS
@@ -524,6 +557,13 @@ async function startServer() {
 
       const sessionId = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      if (isPgConnected()) {
+        await pgCreateSession(sessionId, defaultUser.id, expiresAt, {
+          name: defaultUser.name,
+          email: defaultUser.email,
+          role: defaultUser.role
+        });
+      }
       store.sessions[sessionId] = { userId: defaultUser.id, expiresAt: expiresAt.getTime() };
       saveStore(store);
 
@@ -532,6 +572,7 @@ async function startServer() {
 
       res.json({
         success: true,
+        token: sessionId,
         user: defaultUser,
         customer: newCustomer,
         address: DEFAULT_ADDRESS
@@ -551,6 +592,13 @@ async function startServer() {
 
     const sessionId = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    if (isPgConnected()) {
+      await pgCreateSession(sessionId, publicUser.id, expiresAt, {
+        name: publicUser.name,
+        email: publicUser.email,
+        role: publicUser.role
+      });
+    }
     store.sessions[sessionId] = { userId: publicUser.id, expiresAt: expiresAt.getTime() };
     saveStore(store);
 
@@ -558,6 +606,7 @@ async function startServer() {
 
     res.json({
       success: true,
+      token: sessionId,
       user: publicUser,
       customer: customerRecord || null,
       address: resolvedAddress
@@ -650,7 +699,11 @@ async function startServer() {
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     if (isPgConnected()) {
-      await pgCreateSession(sessionId, createdUser.id, expiresAt);
+      await pgCreateSession(sessionId, createdUser.id, expiresAt, {
+        name: createdUser.name,
+        email: createdUser.email,
+        role: createdUser.role
+      });
     }
     store.sessions[sessionId] = { userId: createdUser.id, expiresAt: expiresAt.getTime() };
     saveStore(store);
@@ -660,6 +713,7 @@ async function startServer() {
 
     res.json({
       success: true,
+      token: sessionId,
       user: createdUser,
       customer: newCust,
       address: newAddress
@@ -668,7 +722,7 @@ async function startServer() {
 
   // 4. Logout endpoint (/api/auth/logout)
   app.post('/api/auth/logout', async (req: Request, res: Response) => {
-    const sessionId = req.cookies.felicita_session || req.signedCookies.felicita_session;
+    const sessionId = getSessionIdFromRequest(req);
     if (sessionId) {
       if (isPgConnected()) {
         await pgDeleteSession(sessionId);
@@ -677,7 +731,7 @@ async function startServer() {
       saveStore(store);
     }
 
-    clearAuthCookie(res);
+    clearAuthCookie(req, res);
     res.json({ success: true, message: 'Desconectado com sucesso' });
   });
 

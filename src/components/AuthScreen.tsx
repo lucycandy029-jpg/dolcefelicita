@@ -143,19 +143,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         } else if (res && res.message) {
           setFormError(res.message);
           return;
+        } else {
+          setFormError('Falha na autenticação do administrador no servidor.');
+          return;
         }
-      } catch (e) {}
-
-      const adminUser: User = {
-        id: 'usr-admin-master',
-        name: 'Administrador Felicitá',
-        email: normalizedEmail,
-        phone: '(11) 98765-4321',
-        role: 'admin',
-        createdAt: new Date().toISOString()
-      };
-      onLoginSuccess(adminUser);
-      return;
+      } catch (e: any) {
+        setFormError(e?.message || 'Erro de conexão com o servidor ao autenticar.');
+        return;
+      }
     }
 
     // 2. Register Mode: Create brand new customer profile with complete delivery address and map location
@@ -199,35 +194,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         } else if (res && res.message) {
           setFormError(res.message);
           return;
+        } else {
+          setFormError('Erro ao registrar usuário no servidor.');
+          return;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Server registration call error:', err);
+        setFormError(err?.message || 'Erro de conexão ao registrar no servidor.');
+        return;
       }
-
-      const newCust: Customer = {
-        id: 'cust-' + Date.now(),
-        name: name.trim(),
-        email: normalizedEmail,
-        phone: phone.trim() || '(11) 99999-0000',
-        city: `${neighborhood.trim() ? `${neighborhood.trim()} • ` : ''}${city.trim() || 'São Paulo'}`,
-        address: newAddress,
-        ordersCount: 0,
-        totalSpent: 0,
-        isActive: true,
-        createdAt: new Date().toLocaleDateString('pt-BR')
-      };
-
-      const newUser: User = {
-        id: newCust.id,
-        name: newCust.name,
-        email: newCust.email,
-        phone: newCust.phone,
-        role: 'customer',
-        createdAt: new Date().toISOString()
-      };
-
-      onLoginSuccess(newUser, newCust, newAddress);
-      return;
     }
 
     // 3. Login Mode
@@ -239,70 +214,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       } else if (res && res.message) {
         setFormError(res.message);
         return;
+      } else {
+        setFormError('E-mail ou senha incorretos.');
+        return;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Server login error:', err);
-    }
-
-    // Local fallback if offline:
-    if (matchingCustomer) {
-      const loggedUser: User = {
-        id: matchingCustomer.id,
-        name: matchingCustomer.name,
-        email: matchingCustomer.email,
-        phone: matchingCustomer.phone,
-        role: 'customer',
-        createdAt: matchingCustomer.createdAt
-      };
-      onLoginSuccess(loggedUser, matchingCustomer, matchingCustomer.address);
+      setFormError(err?.message || 'Erro de conexão com o servidor ao autenticar.');
       return;
     }
-
-    const displayName = name.trim() || (
-      normalizedEmail.split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .split(' ')
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ')
-    );
-
-    const fallbackAddress: Address = {
-      id: 'addr-' + Date.now(),
-      title: 'Endereço Principal',
-      postalCode: cep || '01310-100',
-      street: street || 'Av. Paulista',
-      number: number || '1000',
-      complement: complement || 'Apto 82',
-      neighborhood: neighborhood || 'Bela Vista',
-      city: city || 'São Paulo',
-      state: state || 'SP',
-      referencePoint: referencePoint || '',
-      isDefault: true
-    };
-
-    const newCust: Customer = {
-      id: 'cust-' + Date.now(),
-      name: displayName,
-      email: normalizedEmail,
-      phone: phone.trim() || '(11) 99999-0000',
-      city: `${neighborhood ? `${neighborhood} • ` : ''}${city || 'São Paulo'}`,
-      address: fallbackAddress,
-      ordersCount: 0,
-      totalSpent: 0,
-      isActive: true,
-      createdAt: new Date().toLocaleDateString('pt-BR')
-    };
-
-    const newUser: User = {
-      id: newCust.id,
-      name: newCust.name,
-      email: newCust.email,
-      phone: newCust.phone,
-      role: 'customer',
-      createdAt: new Date().toISOString()
-    };
-
-    onLoginSuccess(newUser, newCust, fallbackAddress);
   };
 
   const handleSocialSubmit = async (e: React.FormEvent) => {

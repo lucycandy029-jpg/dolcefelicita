@@ -304,6 +304,28 @@
   },
   "customers": [
     {
+      "id": "abd42fb1-adfe-4158-8169-7bf87368c5e9",
+      "name": "Carla Silveira",
+      "email": "cliente.teste.1792759353848@teste.com",
+      "phone": "(11) 97777-6666",
+      "city": "Bela Vista • São Paulo",
+      "address": {
+        "id": "b7826a0e-f5af-4dda-a5a9-0d8ff4caa3e6",
+        "title": "Endereço Principal",
+        "postalCode": "01310-100",
+        "street": "Av. Paulista",
+        "number": "1000",
+        "neighborhood": "Bela Vista",
+        "city": "São Paulo",
+        "state": "SP",
+        "isDefault": true
+      },
+      "ordersCount": 0,
+      "totalSpent": 0,
+      "isActive": true,
+      "createdAt": "23/10/2026"
+    },
+    {
       "id": "cust-1",
       "name": "Mariana Vasconcellos",
       "email": "mariana.vasconcellos@exemplo.com",
@@ -536,9 +558,42 @@
         "state": "SP",
         "isDefault": true
       }
+    },
+    {
+      "id": "abd42fb1-adfe-4158-8169-7bf87368c5e9",
+      "name": "Carla Silveira",
+      "email": "cliente.teste.1792759353848@teste.com",
+      "phone": "(11) 97777-6666",
+      "role": "customer",
+      "createdAt": "2026-10-23T12:42:33.850Z",
+      "password": "senha123Cliente",
+      "address": {
+        "id": "b7826a0e-f5af-4dda-a5a9-0d8ff4caa3e6",
+        "title": "Endereço Principal",
+        "postalCode": "01310-100",
+        "street": "Av. Paulista",
+        "number": "1000",
+        "neighborhood": "Bela Vista",
+        "city": "São Paulo",
+        "state": "SP",
+        "isDefault": true
+      }
     }
   ],
   "isRevenueReset": false,
-  "lastUpdated": 1792716122283,
-  "sessions": {}
+  "lastUpdated": 1792759353918,
+  "sessions": {
+    "d81b44c20c7d9d36149aed85f10ddb8679e0927214b7d68e0d0f4069bc6a4686": {
+      "userId": "usr-admin-master",
+      "expiresAt": 1795351353841
+    },
+    "0b1d8463989581db3694d2b6e88e421b9b481c67d734abec85e69483b5d0c748": {
+      "userId": "abd42fb1-adfe-4158-8169-7bf87368c5e9",
+      "expiresAt": 1795351353909
+    },
+    "9b9edbc19d80cfe2955c864fa26921b32b444d019025e893b67c5230487b4bd2": {
+      "userId": "abd42fb1-adfe-4158-8169-7bf87368c5e9",
+      "expiresAt": 1795351353913
+    }
+  }
 }
