@@ -15,9 +15,10 @@ import {
   Headphones, 
   Clock, 
   Sparkles,
-  Check
+  Check,
+  Copy
 } from 'lucide-react';
-import { CartItem, Address, Order } from '../types';
+import { CartItem, Address, Order, StoreSettings } from '../types';
 
 interface CheckoutScreenProps {
   cartItems: CartItem[];
@@ -27,6 +28,7 @@ interface CheckoutScreenProps {
   onConfirmOrder: (orderData: Partial<Order>) => void;
   activeAddress?: Address | null;
   onUpdateAddress: (newAddress: Address) => void;
+  storeSettings?: StoreSettings;
 }
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
@@ -36,7 +38,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   onNavigateToMenu,
   onConfirmOrder,
   activeAddress,
-  onUpdateAddress
+  onUpdateAddress,
+  storeSettings
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit' | 'debit' | 'cash'>('pix');
   const [couponCode, setCouponCode] = useState<string>('FELICITA10');
@@ -44,6 +47,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
   const [ecoUtensils, setEcoUtensils] = useState<boolean>(true);
   const [showNewAddressForm, setShowNewAddressForm] = useState<boolean>(false);
   const [cashChangeNeeded, setCashChangeNeeded] = useState<string>('');
+  const [pixCopied, setPixCopied] = useState<boolean>(false);
 
   // Credit card form state
   const [cardNumber, setCardNumber] = useState<string>('');
@@ -456,20 +460,58 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                     </div>
 
                     {paymentMethod === 'pix' && (
-                      <div className="mt-4 pt-4 border-t border-[#dac0c3]/30 bg-white/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4">
-                        <div className="w-20 h-20 bg-[#f2ede8] rounded-xl flex items-center justify-center shrink-0 border border-[#dac0c3]/40">
-                          <QrCode className="w-14 h-14 text-[#1d1b19]" />
+                      <div className="mt-4 pt-4 border-t border-[#dac0c3]/30 bg-white/95 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-5">
+                        <div className="w-28 h-28 sm:w-32 sm:h-32 bg-white rounded-2xl flex items-center justify-center shrink-0 border border-[#dac0c3]/60 p-2 shadow-xs">
+                          {storeSettings?.pixQrCodeUrl ? (
+                            <img
+                              src={storeSettings.pixQrCodeUrl}
+                              alt="QR Code Pix Oficial"
+                              className="w-full h-full object-contain rounded-xl"
+                            />
+                          ) : (
+                            <QrCode className="w-20 h-20 text-[#1d1b19]" />
+                          )}
                         </div>
-                        <div className="flex flex-col text-center sm:text-left gap-1">
-                          <span className="text-xs font-bold text-[#1d1b19]">
-                            O QR Code dinâmico será gerado ao confirmar o pedido.
-                          </span>
-                          <span className="text-[11px] text-[#554245]">
-                            Você terá até 15 minutos para escanear ou copiar a chave no aplicativo bancário.
-                          </span>
+                        <div className="flex flex-col text-center sm:text-left gap-1.5 flex-1 min-w-0">
+                          <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-[#1d1b19]">
+                              QR Code & Chave PIX Oficial
+                            </span>
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                              {storeSettings?.pixKeyType || 'CNPJ'}
+                            </span>
+                          </div>
+
+                          {storeSettings?.pixBeneficiaryName && (
+                            <span className="text-[11px] text-[#554245]">
+                              Beneficiário: <strong>{storeSettings.pixBeneficiaryName}</strong>
+                            </span>
+                          )}
+
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 bg-[#f8f3ee] px-3 py-1.5 rounded-xl border border-[#dac0c3]/40 text-xs font-mono font-bold text-[#1d1b19] truncate select-all">
+                              {storeSettings?.pixKey || '12345678000199'}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const key = storeSettings?.pixKey || '12345678000199';
+                                navigator.clipboard.writeText(key);
+                                setPixCopied(true);
+                                setTimeout(() => setPixCopied(false), 2500);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-[#9c3e54] hover:bg-[#64132b] text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-xs"
+                              title="Copiar chave PIX"
+                            >
+                              {pixCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{pixCopied ? 'Copiado!' : 'Copiar'}</span>
+                            </button>
+                          </div>
+
                           <span className="text-xs font-bold text-[#994703] flex items-center gap-1 mt-1 justify-center sm:justify-start">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            Economia extra de R$ {pixDiscount.toFixed(2).replace('.', ',')} aplicada no checkout!
+                            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                            Economia de 5% (R$ {pixDiscount.toFixed(2).replace('.', ',')}) garantida via PIX!
                           </span>
                         </div>
                       </div>

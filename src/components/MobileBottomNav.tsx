@@ -23,6 +23,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   isLoggedIn,
   userRole
 }) => {
+  if (userRole === 'admin') {
+    return null;
+  }
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-[#dac0c3]/30 px-3 py-1.5 lg:hidden shadow-[0_-4px_24px_rgba(61,28,18,0.08)]">
       <div className="max-w-md mx-auto flex items-center justify-around">

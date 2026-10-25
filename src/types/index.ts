@@ -136,12 +136,15 @@ export interface StoreSettings {
   phone: string;
   whatsapp: string;
   instagram: string;
-  address: string;
+  address?: string;
   openingHours: string;
   closedDays: string;
   baseDeliveryFee: number;
   freeShippingThreshold: number;
   pixKey: string;
+  pixKeyType?: string;
+  pixBeneficiaryName?: string;
+  pixQrCodeUrl?: string;
   pixDiscountPercent: number;
 }
 

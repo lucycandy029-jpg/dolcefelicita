@@ -274,6 +274,11 @@ export default function App() {
     selectedAddons: ProductAddon[],
     notes: string
   ) => {
+    // Administrator cannot place orders or add to cart
+    if (currentUser.role === 'admin') {
+      return;
+    }
+
     const addonsTotal = selectedAddons.reduce((sum, a) => sum + a.price, 0);
     const itemTotal = (product.price + addonsTotal) * quantity;
 
@@ -318,8 +323,13 @@ export default function App() {
     setCartItems(prev => prev.filter(item => item.id !== itemId));
   };
 
-  // Order finalization
+  // Order finalization - initial status is always 'pending' ("Pedido Realizado")
   const handleConfirmOrder = (orderData: Partial<Order>) => {
+    // Administrator cannot place orders
+    if (currentUser.role === 'admin') {
+      return;
+    }
+
     const newOrderNumber = Math.floor(4830 + Math.random() * 50);
     const createdOrder: Order = {
       id: 'ord-' + newOrderNumber,
@@ -327,7 +337,7 @@ export default function App() {
       customerName: currentUser.name && currentUser.name !== 'Visitante' ? currentUser.name : (orderData.customerName || 'Cliente Felicitá'),
       customerEmail: currentUser.email || orderData.customerEmail || 'cliente@exemplo.com',
       customerPhone: currentUser.phone || orderData.customerPhone || '(11) 99999-0000',
-      status: 'preparing',
+      status: 'pending', // "Pedido Realizado" - primeiro status oficial
       items: orderData.items || cartItems,
       subtotal: orderData.subtotal || cartTotal,
       deliveryFee: orderData.deliveryFee ?? storeSettings.baseDeliveryFee,
@@ -392,6 +402,7 @@ export default function App() {
   };
 
   const handleReorder = (order: Order) => {
+    if (currentUser.role === 'admin') return;
     if (order.items && order.items.length > 0) {
       setCartItems(order.items);
       setCurrentTab('carrinho');
@@ -455,7 +466,12 @@ export default function App() {
       localStorage.setItem('felicita_categories_list', JSON.stringify(updatedCategories));
     } catch (e) {}
     broadcastSync('CATEGORIES_UPDATED', updatedCategories);
-    api.addProduct(newProd).catch(() => {});
+    api.addProduct(newProd).then(res => {
+      if (res && res.success && Array.isArray(res.products)) {
+        setProducts(res.products);
+        if (Array.isArray(res.categories)) setCategories(res.categories);
+      }
+    }).catch(() => {});
   };
 
   const handleUpdateProduct = (updatedProd: Product) => {
@@ -469,8 +485,8 @@ export default function App() {
   };
 
   const handleDeleteProduct = (productId: string) => {
-    const prod = products.find(p => p.id === productId);
-    const updatedProducts = products.filter(p => p.id !== productId);
+    const prod = products.find(p => p.id === productId || p.slug === productId);
+    const updatedProducts = products.filter(p => p.id !== productId && p.slug !== productId);
     setProducts(updatedProducts);
     try {
       localStorage.setItem('felicita_products_list', JSON.stringify(updatedProducts));
@@ -487,17 +503,27 @@ export default function App() {
       } catch (e) {}
       broadcastSync('CATEGORIES_UPDATED', updatedCategories);
     }
-    api.deleteProduct(productId).catch(() => {});
+
+    api.deleteProduct(productId).then(res => {
+      if (res && res.success && Array.isArray(res.products)) {
+        setProducts(res.products);
+        if (Array.isArray(res.categories)) setCategories(res.categories);
+      }
+    }).catch(() => {});
   };
 
   const handleAddCategory = (newCat: Category) => {
-    const updated = [...categories, newCat];
+    const updated = [...categories.filter(c => c.id !== newCat.id), newCat];
     setCategories(updated);
     try {
       localStorage.setItem('felicita_categories_list', JSON.stringify(updated));
     } catch (e) {}
     broadcastSync('CATEGORIES_UPDATED', updated);
-    api.addCategory(newCat).catch(() => {});
+    api.addCategory(newCat).then(res => {
+      if (res && res.success && Array.isArray(res.categories)) {
+        setCategories(res.categories);
+      }
+    }).catch(() => {});
   };
 
   const handleDeleteCategory = (catId: string) => {
@@ -507,17 +533,34 @@ export default function App() {
       localStorage.setItem('felicita_categories_list', JSON.stringify(updated));
     } catch (e) {}
     broadcastSync('CATEGORIES_UPDATED', updated);
-    api.deleteCategory(catId).catch(() => {});
+
+    const updatedProducts = products.map(p => p.categoryId === catId ? { ...p, categoryId: 'cookies' } : p);
+    setProducts(updatedProducts);
+    try {
+      localStorage.setItem('felicita_products_list', JSON.stringify(updatedProducts));
+    } catch (e) {}
+    broadcastSync('PRODUCTS_UPDATED', updatedProducts);
+
+    api.deleteCategory(catId).then(res => {
+      if (res && res.success && Array.isArray(res.categories)) {
+        setCategories(res.categories);
+        if (Array.isArray(res.products)) setProducts(res.products);
+      }
+    }).catch(() => {});
   };
 
   const handleAddAddon = (newAddon: ProductAddon) => {
-    const updated = [...addons, newAddon];
+    const updated = [...addons.filter(a => a.id !== newAddon.id), newAddon];
     setAddons(updated);
     try {
       localStorage.setItem('felicita_addons_list', JSON.stringify(updated));
     } catch (e) {}
     broadcastSync('ADDONS_UPDATED', updated);
-    api.addAddon(newAddon).catch(() => {});
+    api.addAddon(newAddon).then(res => {
+      if (res && res.success && Array.isArray(res.addons)) {
+        setAddons(res.addons);
+      }
+    }).catch(() => {});
   };
 
   const handleDeleteAddon = (addonId: string) => {
@@ -527,7 +570,11 @@ export default function App() {
       localStorage.setItem('felicita_addons_list', JSON.stringify(updated));
     } catch (e) {}
     broadcastSync('ADDONS_UPDATED', updated);
-    api.deleteAddon(addonId).catch(() => {});
+    api.deleteAddon(addonId).then(res => {
+      if (res && res.success && Array.isArray(res.addons)) {
+        setAddons(res.addons);
+      }
+    }).catch(() => {});
   };
 
   const handleDeleteCustomer = (customerId: string) => {
@@ -704,7 +751,11 @@ export default function App() {
       <Header
         currentTab={currentTab}
         onNavigate={tab => {
-          if (tab === 'admin' && currentUser.role !== 'admin') {
+          if (currentUser.role === 'admin') {
+            setCurrentTab('admin');
+            return;
+          }
+          if (tab === 'admin') {
             setCurrentTab('auth');
           } else {
             setCurrentTab(tab);
@@ -723,112 +774,86 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="w-full pt-24 sm:pt-28 pb-20 lg:pb-8 flex-1">
-        {(currentTab === 'cardapio' || currentTab === 'mais-pedidos' || currentTab === 'combos') && (
-          <MenuScreen
-            categories={categories}
+        {currentUser.role === 'admin' ? (
+          /* PAINEL ADMINISTRATIVO: Ao logar como administrador, aparece APENAS o painel administrativo */
+          <AdminPanel
+            orders={orders}
             products={products}
-            onAddToCart={handleAddToCart}
-            onNavigateToCart={() => setCurrentTab('carrinho')}
-          />
-        )}
-
-        {currentTab === 'carrinho' && (
-          <CheckoutScreen
-            cartItems={cartItems}
-            onUpdateQuantity={handleUpdateQuantity}
-            onRemoveItem={handleRemoveItem}
-            onNavigateToMenu={() => setCurrentTab('cardapio')}
-            onConfirmOrder={handleConfirmOrder}
-            activeAddress={activeAddress}
-            onUpdateAddress={addr => {
-              setActiveAddress(addr);
-              try {
-                localStorage.setItem('felicita_active_address', JSON.stringify(addr));
-              } catch (e) {}
-            }}
-          />
-        )}
-
-        {currentTab === 'rastreio' && (
-          <OrderTrackingScreen
-            order={activeCustomerOrder}
-            pastOrders={pastCustomerOrders}
-            onNavigateToMenu={() => setCurrentTab('cardapio')}
-            onReorder={handleReorder}
-          />
-        )}
-
-        {currentTab === 'auth' && (
-          <AuthScreen
+            categories={categories}
+            addons={addons}
+            storeSettings={storeSettings}
             customers={customers}
-            onLoginSuccess={handleLoginSuccess}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onAddStockBatch={handleAddStockBatch}
+            onAddProduct={handleAddProduct}
+            onUpdateProduct={handleUpdateProduct}
+            onDeleteProduct={handleDeleteProduct}
+            onAddCategory={handleAddCategory}
+            onDeleteCategory={handleDeleteCategory}
+            onAddAddon={handleAddAddon}
+            onDeleteAddon={handleDeleteAddon}
+            onDeleteCustomer={handleDeleteCustomer}
+            onSetProductStock={handleSetProductStock}
+            onUpdateStoreSettings={handleUpdateStoreSettings}
+            onUpdateOrderCourier={handleUpdateOrderCourier}
+            onDeleteOrder={handleDeleteOrder}
+            onClearAllOrders={handleClearAllOrders}
+            onResetRevenue={handleResetRevenue}
+            onRestoreRevenue={handleRestoreRevenue}
+            isRevenueReset={isRevenueReset}
+            onLogout={handleLogout}
           />
-        )}
+        ) : (
+          /* Telas para Clientes / Visitantes */
+          <>
+            {(currentTab === 'cardapio' || currentTab === 'mais-pedidos' || currentTab === 'combos') && (
+              <MenuScreen
+                categories={categories}
+                products={products}
+                onAddToCart={handleAddToCart}
+                onNavigateToCart={() => setCurrentTab('carrinho')}
+              />
+            )}
 
-        {/* PAINEL ADMINISTRATIVO: Só aparece depois de logado como administrador */}
-        {currentTab === 'admin' && (
-          currentUser.role === 'admin' ? (
-            <AdminPanel
-              orders={orders}
-              products={products}
-              categories={categories}
-              addons={addons}
-              storeSettings={storeSettings}
-              customers={customers}
-              onUpdateOrderStatus={handleUpdateOrderStatus}
-              onAddStockBatch={handleAddStockBatch}
-              onAddProduct={handleAddProduct}
-              onUpdateProduct={handleUpdateProduct}
-              onDeleteProduct={handleDeleteProduct}
-              onAddCategory={handleAddCategory}
-              onDeleteCategory={handleDeleteCategory}
-              onAddAddon={handleAddAddon}
-              onDeleteAddon={handleDeleteAddon}
-              onDeleteCustomer={handleDeleteCustomer}
-              onSetProductStock={handleSetProductStock}
-              onUpdateStoreSettings={handleUpdateStoreSettings}
-              onUpdateOrderCourier={handleUpdateOrderCourier}
-              onDeleteOrder={handleDeleteOrder}
-              onClearAllOrders={handleClearAllOrders}
-              onResetRevenue={handleResetRevenue}
-              onRestoreRevenue={handleRestoreRevenue}
-              isRevenueReset={isRevenueReset}
-              onLogout={handleLogout}
-            />
-          ) : (
-            <div className="max-w-xl mx-auto px-4 py-16 text-center">
-              <div className="bg-white p-8 rounded-3xl shadow-md border border-[#dac0c3]/40 flex flex-col items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-[#ffd9de] text-[#9c3e54] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[32px]">lock</span>
-                </div>
-                <h2 className="text-xl font-bold text-[#1d1b19] font-heading">
-                  Acesso Restrito ao Administrador
-                </h2>
-                <p className="text-xs text-[#554245]">
-                  O painel administrativo da confeitaria só fica visível e acessível após você se autenticar com o e-mail e senha de administrador.
-                </p>
-                <div className="flex gap-3 mt-2 w-full">
-                  <button
-                    onClick={() => setCurrentTab('cardapio')}
-                    className="flex-1 py-2.5 px-4 rounded-full bg-[#f2ede8] text-xs font-bold text-[#554245] hover:bg-[#ece7e2]"
-                  >
-                    Voltar ao Cardápio
-                  </button>
-                  <button
-                    onClick={() => setCurrentTab('auth')}
-                    className="flex-1 py-2.5 px-4 rounded-full bg-[#9c3e54] text-white text-xs font-bold hover:bg-[#64132b] shadow-sm"
-                  >
-                    Fazer Login de Acesso
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
+            {currentTab === 'carrinho' && (
+              <CheckoutScreen
+                cartItems={cartItems}
+                onUpdateQuantity={handleUpdateQuantity}
+                onRemoveItem={handleRemoveItem}
+                onNavigateToMenu={() => setCurrentTab('cardapio')}
+                onConfirmOrder={handleConfirmOrder}
+                activeAddress={activeAddress}
+                storeSettings={storeSettings}
+                onUpdateAddress={addr => {
+                  setActiveAddress(addr);
+                  try {
+                    localStorage.setItem('felicita_active_address', JSON.stringify(addr));
+                  } catch (e) {}
+                }}
+              />
+            )}
+
+            {currentTab === 'rastreio' && (
+              <OrderTrackingScreen
+                order={activeCustomerOrder}
+                pastOrders={pastCustomerOrders}
+                onNavigateToMenu={() => setCurrentTab('cardapio')}
+                onReorder={handleReorder}
+              />
+            )}
+
+            {currentTab === 'auth' && (
+              <AuthScreen
+                customers={customers}
+                onLoginSuccess={handleLoginSuccess}
+              />
+            )}
+          </>
         )}
       </main>
 
-      {/* Floating Quick Cart Notification Widget (on Cardapio screen) */}
-      {(currentTab === 'cardapio' || currentTab === 'mais-pedidos') && cartCount > 0 && (
+      {/* Floating Quick Cart Notification Widget (on Cardapio screen - Clientes apenas) */}
+      {currentUser.role !== 'admin' && (currentTab === 'cardapio' || currentTab === 'mais-pedidos') && cartCount > 0 && (
         <aside className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-40 max-w-sm w-[calc(100%-2rem)] sm:w-[calc(100%-3rem)] bg-white/95 backdrop-blur-xl p-3.5 rounded-2xl shadow-[0_12px_36px_rgba(61,28,18,0.18)] flex items-center justify-between gap-3 border border-[#dac0c3]/40 transition-transform duration-300">
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative w-11 h-11 rounded-full bg-[#ffd9de] flex items-center justify-center text-[#9c3e54] shrink-0 shadow-sm">
@@ -859,24 +884,26 @@ export default function App() {
         </aside>
       )}
 
-      {/* Mobile Bottom Navigation Bar */}
-      <MobileBottomNav
-        currentTab={currentTab}
-        onNavigate={tab => {
-          if (tab === 'admin' && currentUser.role !== 'admin') {
-            setCurrentTab('auth');
-          } else {
-            setCurrentTab(tab);
-          }
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        cartCount={cartCount}
-        isLoggedIn={isLoggedIn}
-        userRole={currentUser.role}
-      />
+      {/* Mobile Bottom Navigation Bar (Clientes apenas) */}
+      {currentUser.role !== 'admin' && (
+        <MobileBottomNav
+          currentTab={currentTab}
+          onNavigate={tab => {
+            if (tab === 'admin' && currentUser.role !== 'admin') {
+              setCurrentTab('auth');
+            } else {
+              setCurrentTab(tab);
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          cartCount={cartCount}
+          isLoggedIn={isLoggedIn}
+          userRole={currentUser.role}
+        />
+      )}
 
-      {/* Global Footer */}
-      <Footer />
+      {/* Global Footer (Clientes apenas) */}
+      {currentUser.role !== 'admin' && <Footer />}
     </div>
   );
 }

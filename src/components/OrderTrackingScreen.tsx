@@ -58,8 +58,8 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
         return {
           progressPercent: 20,
           currentStepIndex: 0,
-          statusBadge: 'Aguardando Confirmação',
-          statusDesc: 'Seu pedido foi recebido no ateliê e aguarda aprovação da cozinha.',
+          statusBadge: 'Pedido Realizado',
+          statusDesc: 'Seu pedido foi realizado e registrado com sucesso! Aguardando confirmação do ateliê.',
           estimateLabel: 'Hoje: 35 – 50 min',
           timeRemaining: 'Aprox. 45 min restantes'
         };
@@ -469,7 +469,9 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
                 <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between p-2.5 rounded-xl bg-white/95 backdrop-blur-md">
                   <div className="flex items-center gap-1.5 text-xs text-[#1d1b19] font-bold truncate">
                     <MapPin className="w-4 h-4 text-[#9c3e54] shrink-0" />
-                    <span className="truncate">Av. Paulista, 1000 - Apto 82</span>
+                    <span className="truncate">
+                      {order.address?.street ? `${order.address.street}, ${order.address.number}${order.address.complement ? ` - ${order.address.complement}` : ''}` : 'Endereço de Entrega'}
+                    </span>
                   </div>
                   <span className="text-[10px] text-[#7f5347] font-extrabold uppercase shrink-0">
                     3.2 km

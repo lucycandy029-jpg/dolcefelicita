@@ -350,12 +350,15 @@ export const DEFAULT_STORE_SETTINGS = {
   phone: '(11) 98765-4321',
   whatsapp: '5511987654321',
   instagram: '@felicitadoces',
-  address: 'Av. Paulista, 1000 - Jardins, São Paulo - SP',
+  address: '',
   openingHours: 'Terça a Domingo: 11h às 22h',
   closedDays: 'Segundas-feiras',
   baseDeliveryFee: 7.50,
   freeShippingThreshold: 50.00,
   pixKey: '12345678000199',
+  pixKeyType: 'CNPJ',
+  pixBeneficiaryName: 'Dolce Felicitá Confeitaria Ltda',
+  pixQrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020126580014BR.GOV.BCB.PIX011412345678000199520400005303986540542.755802BR5925Dolce%20Felicita%20Doces6009Sao%20Paulo62070503***6304E2CA',
   pixDiscountPercent: 5.0
 };
 

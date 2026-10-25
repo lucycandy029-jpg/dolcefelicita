@@ -630,6 +630,22 @@ export async function pgSaveProduct(prod: Product): Promise<boolean> {
     const pId = toValidUuid(prod.id);
     const slug = prod.slug || prod.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+    // 0. Ensure category exists to satisfy foreign key constraint
+    const catId = prod.categoryId || 'cookies';
+    await client.query(
+      `INSERT INTO categories (id, name, display_order, is_active)
+       VALUES ($1, $2, 99, TRUE)
+       ON CONFLICT (id) DO NOTHING;`,
+      [catId, catId === 'cookies' ? 'Cookies Artesanais' : catId]
+    );
+
+    // 0.1 Check if product already exists by ID, UUID, or slug to prevent slug collision errors
+    const existCheck = await client.query(
+      `SELECT id FROM products WHERE id::text = $1 OR id = $2 OR slug = $3 LIMIT 1;`,
+      [prod.id, pId, slug]
+    );
+    const targetId = existCheck.rows.length > 0 ? existCheck.rows[0].id : pId;
+
     // 1. Upsert product
     await client.query(
       `INSERT INTO products (
@@ -648,8 +664,8 @@ export async function pgSaveProduct(prod: Product): Promise<boolean> {
         is_featured = EXCLUDED.is_featured,
         updated_at = CURRENT_TIMESTAMP;`,
       [
-        pId,
-        prod.categoryId || 'cookies',
+        targetId,
+        catId,
         prod.name,
         slug,
         prod.shortDescription || '',
@@ -670,7 +686,7 @@ export async function pgSaveProduct(prod: Product): Promise<boolean> {
         `INSERT INTO product_images (id, product_id, image_url, is_primary)
          VALUES ($1, $2, $3, TRUE)
          ON CONFLICT (id) DO UPDATE SET image_url = EXCLUDED.image_url;`,
-        [toValidUuid(`img-${pId}`), pId, prod.imageUrl]
+        [toValidUuid(`img-${targetId}`), targetId, prod.imageUrl]
       );
     }
 
@@ -679,7 +695,7 @@ export async function pgSaveProduct(prod: Product): Promise<boolean> {
       `INSERT INTO inventory (product_id, quantity_available)
        VALUES ($1, $2)
        ON CONFLICT (product_id) DO UPDATE SET quantity_available = EXCLUDED.quantity_available, updated_at = CURRENT_TIMESTAMP;`,
-      [pId, prod.stockAvailable ?? 20]
+      [targetId, prod.stockAvailable ?? 20]
     );
 
     await client.query('COMMIT');
@@ -695,13 +711,37 @@ export async function pgSaveProduct(prod: Product): Promise<boolean> {
 
 export async function pgDeleteProduct(productId: string): Promise<boolean> {
   if (!pool || !pgConnected) return false;
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const pId = toValidUuid(productId);
-    await pool.query('DELETE FROM products WHERE id = $1;', [pId]);
-    return true;
+
+    // Find actual product id by matching UUID, raw id text, or slug
+    const checkRes = await client.query(
+      `SELECT id FROM products WHERE id::text = $1 OR id = $2 OR slug = $3 LIMIT 1;`,
+      [productId, pId, productId]
+    );
+
+    const targetId = checkRes.rows.length > 0 ? checkRes.rows[0].id : pId;
+
+    // Remove referencing records safely so foreign key constraints never block deletion
+    await client.query('DELETE FROM inventory_movements WHERE product_id = $1;', [targetId]);
+    await client.query('UPDATE order_items SET product_id = NULL WHERE product_id = $1;', [targetId]);
+    await client.query('DELETE FROM product_addon_relations WHERE product_id = $1;', [targetId]);
+    await client.query('DELETE FROM product_images WHERE product_id = $1;', [targetId]);
+    await client.query('DELETE FROM inventory WHERE product_id = $1;', [targetId]);
+
+    // Delete from products table
+    const delRes = await client.query('DELETE FROM products WHERE id = $1;', [targetId]);
+
+    await client.query('COMMIT');
+    return (delRes.rowCount ?? 0) > 0;
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error deleting product from PostgreSQL:', err);
     return false;
+  } finally {
+    client.release();
   }
 }
 
@@ -723,12 +763,14 @@ export async function pgLoadCategories(): Promise<Category[] | null> {
     const res = await pool.query(query);
     if (res.rows.length === 0) return null;
 
-    const list = res.rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      iconName: r.icon_name || 'cake',
-      count: Number(r.count) || 0
-    }));
+    const list = res.rows
+      .filter(r => r.id !== 'all')
+      .map(r => ({
+        id: r.id,
+        name: r.name,
+        iconName: r.icon_name || 'cake',
+        count: Number(r.count) || 0
+      }));
 
     // Add 'all' category at the top
     const totalCount = list.reduce((sum, item) => sum + item.count, 0);
@@ -739,6 +781,138 @@ export async function pgLoadCategories(): Promise<Category[] | null> {
   } catch (err) {
     console.error('Error loading categories from PostgreSQL:', err);
     return null;
+  }
+}
+
+export async function pgSaveCategory(cat: Category): Promise<boolean> {
+  if (!pool || !pgConnected) return false;
+  try {
+    const slug = cat.id || cat.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    await pool.query(
+      `INSERT INTO categories (id, name, icon_name, display_order, is_active)
+       VALUES ($1, $2, $3, COALESCE((SELECT MAX(display_order) + 1 FROM categories), 1), TRUE)
+       ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        icon_name = EXCLUDED.icon_name,
+        is_active = TRUE,
+        updated_at = CURRENT_TIMESTAMP;`,
+      [slug, cat.name, cat.iconName || 'cake']
+    );
+    return true;
+  } catch (err) {
+    console.error('Error saving category in PostgreSQL:', err);
+    return false;
+  }
+}
+
+export async function pgDeleteCategory(categoryId: string): Promise<boolean> {
+  if (!pool || !pgConnected) return false;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Ensure default fallback category exists
+    await client.query(
+      `INSERT INTO categories (id, name, icon_name, is_active)
+       VALUES ('cookies', 'Cookies Artesanais', 'cookie', TRUE)
+       ON CONFLICT (id) DO NOTHING;`
+    );
+
+    // Reassign products that belonged to this category so foreign key is satisfied
+    await client.query(
+      `UPDATE products SET category_id = 'cookies' WHERE category_id = $1;`,
+      [categoryId]
+    );
+
+    // Delete category
+    await client.query(
+      `DELETE FROM categories WHERE id = $1;`,
+      [categoryId]
+    );
+
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting category from PostgreSQL:', err);
+    return false;
+  } finally {
+    client.release();
+  }
+}
+
+export async function pgLoadAddons(): Promise<ProductAddon[] | null> {
+  if (!pool || !pgConnected) return null;
+  try {
+    const res = await pool.query(
+      `SELECT id, name, description, price::numeric::float8 as price
+       FROM product_addons
+       WHERE is_active = true
+       ORDER BY created_at ASC;`
+    );
+    if (res.rows.length === 0) return null;
+    return res.rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      description: r.description || '',
+      price: Number(r.price) || 0
+    }));
+  } catch (err) {
+    console.error('Error loading addons from PostgreSQL:', err);
+    return null;
+  }
+}
+
+export async function pgSaveAddon(addon: ProductAddon): Promise<boolean> {
+  if (!pool || !pgConnected) return false;
+  try {
+    const aId = toValidUuid(addon.id);
+    // Check if addon exists by id, uuid, or name
+    const existCheck = await pool.query(
+      `SELECT id FROM product_addons WHERE id::text = $1 OR id = $2 OR LOWER(TRIM(name)) = LOWER(TRIM($3)) LIMIT 1;`,
+      [addon.id, aId, addon.name]
+    );
+    const targetId = existCheck.rows.length > 0 ? existCheck.rows[0].id : aId;
+
+    await pool.query(
+      `INSERT INTO product_addons (id, name, description, price, is_active)
+       VALUES ($1, $2, $3, $4, TRUE)
+       ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        price = EXCLUDED.price,
+        is_active = TRUE;`,
+      [targetId, addon.name, addon.description || '', addon.price]
+    );
+    return true;
+  } catch (err) {
+    console.error('Error saving addon in PostgreSQL:', err);
+    return false;
+  }
+}
+
+export async function pgDeleteAddon(addonId: string): Promise<boolean> {
+  if (!pool || !pgConnected) return false;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const aId = toValidUuid(addonId);
+    const checkRes = await client.query(
+      `SELECT id FROM product_addons WHERE id::text = $1 OR id = $2 OR LOWER(TRIM(name)) = LOWER(TRIM($3)) LIMIT 1;`,
+      [addonId, aId, addonId]
+    );
+    const targetId = checkRes.rows.length > 0 ? checkRes.rows[0].id : aId;
+
+    await client.query('DELETE FROM product_addon_relations WHERE addon_id = $1;', [targetId]);
+    await client.query('DELETE FROM product_addons WHERE id = $1;', [targetId]);
+
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error deleting addon from PostgreSQL:', err);
+    return false;
+  } finally {
+    client.release();
   }
 }
 

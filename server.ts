@@ -39,6 +39,11 @@ import {
   pgSaveProduct,
   pgDeleteProduct,
   pgLoadCategories,
+  pgSaveCategory,
+  pgDeleteCategory,
+  pgLoadAddons,
+  pgSaveAddon,
+  pgDeleteAddon,
   pgLoadOrders,
   pgSaveOrder,
   pgUpdateOrderStatus,
@@ -208,7 +213,7 @@ setInterval(() => {
 }, 15000);
 
 // Sync in-memory store with PostgreSQL when connected
-async function refreshStoreFromPostgres() {
+async function refreshStoreFromPostgres(shouldSave: boolean = false) {
   if (!isPgConnected()) return;
   try {
     const pgProds = await pgLoadProducts();
@@ -219,6 +224,11 @@ async function refreshStoreFromPostgres() {
     const pgCats = await pgLoadCategories();
     if (pgCats && pgCats.length > 0) {
       store.categories = pgCats;
+    }
+
+    const pgAddons = await pgLoadAddons();
+    if (pgAddons && pgAddons.length > 0) {
+      store.addons = pgAddons;
     }
 
     const pgOrders = await pgLoadOrders();
@@ -236,7 +246,9 @@ async function refreshStoreFromPostgres() {
       store.storeSettings = pgSettings;
     }
 
-    saveStore(store);
+    if (shouldSave) {
+      saveStore(store);
+    }
   } catch (err) {
     console.error('Error refreshing store from PostgreSQL:', err);
   }
@@ -245,7 +257,7 @@ async function refreshStoreFromPostgres() {
 async function startServer() {
   // Initialize PostgreSQL pool
   await initPostgres();
-  await refreshStoreFromPostgres();
+  await refreshStoreFromPostgres(true);
 
   // Retry PostgreSQL connection periodically if not yet established
   if (!isPgConnected()) {
@@ -253,10 +265,11 @@ async function startServer() {
       const connected = await initPostgres();
       if (connected) {
         clearInterval(retryInterval);
-        await refreshStoreFromPostgres();
+        await refreshStoreFromPostgres(true);
         broadcast('PRODUCTS_UPDATED', store.products);
         broadcast('ORDERS_UPDATED', store.orders);
         broadcast('CATEGORIES_UPDATED', store.categories);
+        broadcast('ADDONS_UPDATED', store.addons);
       }
     }, 20000);
   }
@@ -305,11 +318,7 @@ async function startServer() {
   // ============================================================================
   // FULL APPLICATION STATE (Cross-Device Sync)
   // ============================================================================
-  app.get('/api/state', async (_req: Request, res: Response) => {
-    if (isPgConnected()) {
-      await refreshStoreFromPostgres();
-    }
-
+  app.get('/api/state', (_req: Request, res: Response) => {
     res.json({
       success: true,
       pgConnected: isPgConnected(),
@@ -930,13 +939,13 @@ async function startServer() {
 
   app.delete('/api/products/:id', async (req: Request, res: Response) => {
     const productId = req.params.id;
-    const prod = store.products.find(p => p.id === productId);
+    const prod = store.products.find(p => p.id === productId || p.slug === productId);
 
     if (isPgConnected()) {
       await pgDeleteProduct(productId);
     }
 
-    store.products = store.products.filter(p => p.id !== productId);
+    store.products = store.products.filter(p => p.id !== productId && p.slug !== productId);
 
     if (prod) {
       store.categories = store.categories.map(c => 
@@ -957,7 +966,7 @@ async function startServer() {
 
     let targetProduct: Product | undefined;
     store.products = store.products.map(p => {
-      if (p.id === productId) {
+      if (p.id === productId || p.slug === productId) {
         let newStock = p.stockAvailable || 0;
         if (typeof quantity === 'number') {
           newStock = Math.max(0, quantity);
@@ -983,35 +992,67 @@ async function startServer() {
   // ============================================================================
   // CATEGORIES API
   // ============================================================================
-  app.post('/api/categories', (req: Request, res: Response) => {
+  app.post('/api/categories', async (req: Request, res: Response) => {
     const newCat = req.body as Category;
-    store.categories = [...store.categories, newCat];
+    if (!newCat || !newCat.name) {
+      res.status(400).json({ success: false, message: 'Dados da categoria inválidos' });
+      return;
+    }
+
+    if (isPgConnected()) {
+      await pgSaveCategory(newCat);
+    }
+
+    store.categories = [...store.categories.filter(c => c.id !== newCat.id), newCat];
     saveStore(store);
     broadcast('CATEGORIES_UPDATED', store.categories);
     res.json({ success: true, categories: store.categories });
   });
 
-  app.delete('/api/categories/:id', (req: Request, res: Response) => {
+  app.delete('/api/categories/:id', async (req: Request, res: Response) => {
     const catId = req.params.id;
+
+    if (isPgConnected()) {
+      await pgDeleteCategory(catId);
+    }
+
     store.categories = store.categories.filter(c => c.id !== catId);
+    // Reassign any products from deleted category to default 'cookies'
+    store.products = store.products.map(p => p.categoryId === catId ? { ...p, categoryId: 'cookies' } : p);
+
     saveStore(store);
     broadcast('CATEGORIES_UPDATED', store.categories);
-    res.json({ success: true, categories: store.categories });
+    broadcast('PRODUCTS_UPDATED', store.products);
+    res.json({ success: true, categories: store.categories, products: store.products });
   });
 
   // ============================================================================
   // ADDONS API
   // ============================================================================
-  app.post('/api/addons', (req: Request, res: Response) => {
+  app.post('/api/addons', async (req: Request, res: Response) => {
     const addon = req.body as ProductAddon;
-    store.addons = [...store.addons, addon];
+    if (!addon || !addon.name) {
+      res.status(400).json({ success: false, message: 'Dados da personalização inválidos' });
+      return;
+    }
+
+    if (isPgConnected()) {
+      await pgSaveAddon(addon);
+    }
+
+    store.addons = [...store.addons.filter(a => a.id !== addon.id), addon];
     saveStore(store);
     broadcast('ADDONS_UPDATED', store.addons);
     res.json({ success: true, addons: store.addons });
   });
 
-  app.delete('/api/addons/:id', (req: Request, res: Response) => {
+  app.delete('/api/addons/:id', async (req: Request, res: Response) => {
     const addonId = req.params.id;
+
+    if (isPgConnected()) {
+      await pgDeleteAddon(addonId);
+    }
+
     store.addons = store.addons.filter(a => a.id !== addonId);
     saveStore(store);
     broadcast('ADDONS_UPDATED', store.addons);

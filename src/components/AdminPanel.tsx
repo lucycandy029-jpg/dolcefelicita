@@ -179,6 +179,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Store Settings Form State
   const [currentStoreSettings, setCurrentStoreSettings] = useState<StoreSettings>(storeSettings);
   const [settingsSavedFeedback, setSettingsSavedFeedback] = useState<boolean>(false);
+  const pixFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Keep currentStoreSettings updated if storeSettings changes from server
+  React.useEffect(() => {
+    setCurrentStoreSettings(storeSettings);
+  }, [storeSettings]);
 
   // Customer search
   const [customerSearch, setCustomerSearch] = useState<string>('');
@@ -189,7 +195,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Status mapping
   const statusOptions: { value: OrderStatus; label: string; color: string }[] = [
-    { value: 'pending', label: 'Aguardando Confirmação', color: 'bg-amber-100 text-amber-800' },
+    { value: 'pending', label: 'Pedido Realizado', color: 'bg-amber-100 text-amber-800' },
     { value: 'confirmed', label: 'Confirmado', color: 'bg-blue-100 text-blue-800' },
     { value: 'preparing', label: 'Na Cozinha (Preparando)', color: 'bg-orange-100 text-orange-800' },
     { value: 'ready', label: 'Pronto para Envio', color: 'bg-purple-100 text-purple-800' },
@@ -238,6 +244,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       reader.onloadend = () => {
         if (typeof reader.result === 'string') {
           setNewProductImage(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle Pix QR Code Image Upload from Admin Device
+  const handlePixQrCodeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setCurrentStoreSettings(prev => ({
+            ...prev,
+            pixQrCodeUrl: reader.result as string
+          }));
+          showToast('Imagem do QR Code Pix carregada com sucesso! Clique em "Salvar Configurações".');
         }
       };
       reader.readAsDataURL(file);
@@ -382,6 +406,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const clientFirstName = order.customerName.split(' ')[0];
 
     switch (order.status) {
+      case 'pending':
+        msg = `Olá ${clientFirstName}! 🍪 Seu pedido #${order.orderNumber} da Felicitá Doces foi realizado com sucesso e já está registrado na loja! Em instantes daremos início ao preparo.`;
+        break;
       case 'confirmed':
         msg = `Olá ${clientFirstName}! 🍪 Seu pedido #${order.orderNumber} da Felicitá Doces foi confirmado e já está na fila do nosso ateliê! Logo enviaremos novas atualizações.`;
         break;
@@ -1389,26 +1416,6 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="font-bold text-[#1d1b19]">Chave PIX Oficial</label>
-              <input
-                type="text"
-                value={currentStoreSettings.pixKey}
-                onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, pixKey: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
-              />
-            </div>
-
-            <div className="sm:col-span-2 flex flex-col gap-1">
-              <label className="font-bold text-[#1d1b19]">Endereço Físico do Ateliê</label>
-              <input
-                type="text"
-                value={currentStoreSettings.address}
-                onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, address: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
               <label className="font-bold text-[#1d1b19]">Horário de Funcionamento</label>
               <input
                 type="text"
@@ -1448,6 +1455,156 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                 onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, freeShippingThreshold: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 rounded-xl bg-[#f8f3ee] border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
               />
+            </div>
+
+            {/* SEÇÃO DEDICADA: DADOS DO PIX & IMAGEM DO QR CODE */}
+            <div className="sm:col-span-2 mt-4 p-5 rounded-2xl bg-[#ffd9de]/20 border border-[#dac0c3]/50 flex flex-col gap-4">
+              <div className="flex items-center gap-2.5 pb-2 border-b border-[#dac0c3]/30">
+                <div className="w-8 h-8 rounded-full bg-[#9c3e54] text-white flex items-center justify-center font-bold">
+                  <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1d1b19] font-heading">
+                    Chave PIX Oficial & Imagem do QR Code
+                  </h3>
+                  <p className="text-[11px] text-[#554245]">
+                    Configure sua chave e envie a imagem do QR Code para os clientes escanearem no checkout.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Chave PIX Oficial</label>
+                  <input
+                    type="text"
+                    required
+                    value={currentStoreSettings.pixKey}
+                    onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, pixKey: e.target.value })}
+                    placeholder="Ex: 12.345.678/0001-99 ou pix@suaempresa.com"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-[#dac0c3]/50 focus:outline-none focus:ring-1 focus:ring-[#9c3e54] font-mono text-xs font-semibold"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Tipo da Chave</label>
+                  <select
+                    value={currentStoreSettings.pixKeyType || 'CNPJ'}
+                    onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, pixKeyType: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-[#dac0c3]/50 focus:outline-none focus:ring-1 focus:ring-[#9c3e54] text-xs font-semibold cursor-pointer"
+                  >
+                    <option value="CNPJ">CNPJ</option>
+                    <option value="CPF">CPF</option>
+                    <option value="Telefone/Celular">Telefone / Celular</option>
+                    <option value="E-mail">E-mail</option>
+                    <option value="Chave Aleatória">Chave Aleatória (EVP)</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Nome do Titular / Beneficiário da Conta</label>
+                  <input
+                    type="text"
+                    value={currentStoreSettings.pixBeneficiaryName || ''}
+                    onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, pixBeneficiaryName: e.target.value })}
+                    placeholder="Ex: Dolce Felicitá Confeitaria Ltda"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-[#dac0c3]/50 focus:outline-none focus:ring-1 focus:ring-[#9c3e54] text-xs"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-bold text-[#1d1b19]">Desconto no Pagamento via PIX (%)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="50"
+                    value={currentStoreSettings.pixDiscountPercent ?? 5}
+                    onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, pixDiscountPercent: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-[#dac0c3]/50 focus:outline-none focus:ring-1 focus:ring-[#9c3e54] text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* UPLOAD & PRÉ-VISUALIZAÇÃO DA IMAGEM DO QR CODE */}
+              <div className="flex flex-col gap-2 pt-2 border-t border-[#dac0c3]/30">
+                <label className="font-bold text-[#1d1b19] flex items-center gap-1.5">
+                  <span>Imagem do QR Code PIX (Exibida para o Cliente no Checkout):</span>
+                </label>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-2xl border border-[#dac0c3]/40">
+                  {currentStoreSettings.pixQrCodeUrl ? (
+                    <div className="relative w-36 h-36 bg-white rounded-xl border-2 border-[#9c3e54]/30 p-2 shadow-xs shrink-0 flex items-center justify-center group">
+                      <img
+                        src={currentStoreSettings.pixQrCodeUrl}
+                        alt="QR Code Pix"
+                        className="w-full h-full object-contain rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStoreSettings({ ...currentStoreSettings, pixQrCodeUrl: '' })}
+                        className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-xs shadow-md hover:bg-rose-700 transition-colors cursor-pointer"
+                        title="Remover imagem do QR Code"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => pixFileInputRef.current?.click()}
+                      className="w-36 h-36 rounded-xl border-2 border-dashed border-[#dac0c3] bg-[#f8f3ee] flex flex-col items-center justify-center text-[#877274] hover:border-[#9c3e54] cursor-pointer shrink-0 transition-colors p-3 text-center"
+                    >
+                      <Upload className="w-6 h-6 text-[#9c3e54] mb-1" />
+                      <span className="text-[10px] font-bold text-[#1d1b19]">Enviar QR Code</span>
+                      <span className="text-[9px] text-[#7f5347] mt-0.5">PNG, JPG ou WEBP</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col flex-1 gap-2 w-full">
+                    <input
+                      type="file"
+                      ref={pixFileInputRef}
+                      accept="image/*"
+                      onChange={handlePixQrCodeFileChange}
+                      className="hidden"
+                    />
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => pixFileInputRef.current?.click()}
+                        className="px-4 py-2 rounded-full bg-[#9c3e54] hover:bg-[#64132b] text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{currentStoreSettings.pixQrCodeUrl ? 'Substituir Imagem do QR Code' : 'Selecionar Imagem do QR Code'}</span>
+                      </button>
+
+                      {currentStoreSettings.pixQrCodeUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setCurrentStoreSettings({ ...currentStoreSettings, pixQrCodeUrl: '' })}
+                          className="px-3 py-2 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors cursor-pointer border border-rose-200"
+                        >
+                          Remover Imagem
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-1 mt-1">
+                      <span className="text-[10px] text-[#7f5347] font-semibold">
+                        Ou cole diretamente uma URL da imagem do QR Code:
+                      </span>
+                      <input
+                        type="url"
+                        value={currentStoreSettings.pixQrCodeUrl || ''}
+                        onChange={e => setCurrentStoreSettings({ ...currentStoreSettings, pixQrCodeUrl: e.target.value })}
+                        placeholder="https://exemplo.com/qrcode.png"
+                        className="w-full px-3 py-1.5 rounded-xl bg-[#f8f3ee] text-xs border border-[#dac0c3]/40 focus:outline-none focus:ring-1 focus:ring-[#9c3e54]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="sm:col-span-2 pt-4 flex justify-end">
