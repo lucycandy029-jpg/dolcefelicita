@@ -16,7 +16,8 @@ import {
   AlertCircle, 
   Search, 
   CheckCircle2,
-  Info
+  Info,
+  Flame
 } from 'lucide-react';
 import { User, Customer, Address } from '../types';
 import { BrandLogo } from './BrandLogo';
@@ -425,7 +426,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex items-end p-3.5">
                 <div className="flex items-center gap-2.5 text-white">
                   <div className="w-7 h-7 rounded-full bg-[#e87a90]/30 backdrop-blur-md flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-[#ffd9de] text-[18px]">local_fire_department</span>
+                    <Flame className="w-4 h-4 text-[#ffd9de]" />
                   </div>
                   <div>
                     <p className="text-xs font-bold leading-tight">Fornada do Dia</p>

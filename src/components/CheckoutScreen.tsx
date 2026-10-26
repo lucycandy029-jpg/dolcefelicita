@@ -16,7 +16,10 @@ import {
   Clock, 
   Sparkles,
   Check,
-  Copy
+  Copy,
+  Home,
+  Receipt,
+  PackageCheck
 } from 'lucide-react';
 import { CartItem, Address, Order, StoreSettings } from '../types';
 
@@ -283,7 +286,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                   <div className="p-4 rounded-2xl bg-[#f8f3ee] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-[#dac0c3]/20">
                     <div className="flex items-start gap-4">
                       <div className="w-12 h-12 rounded-full bg-[#ffd9de] flex items-center justify-center text-[#9c3e54] shrink-0">
-                        <span className="material-symbols-outlined text-[24px]">home</span>
+                        <Home className="w-6 h-6" />
                       </div>
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
@@ -419,7 +422,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-[0_4px_24px_-2px_rgba(61,28,18,0.06)] border border-[#dac0c3]/30">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 rounded-full bg-[#ffd9de] text-[#9c3e54] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[20px]">payments</span>
+                    <Banknote className="w-5 h-5" />
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-[#1d1b19] font-heading">Forma de Pagamento</h2>
@@ -598,7 +601,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                           <p className="text-xs text-[#554245]">O motoboy levará a maquininha física (débito em conta ou aproximação)</p>
                         </div>
                       </div>
-                      <span className="material-symbols-outlined text-[#9c3e54] text-[24px]">contactless</span>
+                      <div className="w-8 h-8 rounded-full bg-[#ffd9de]/50 flex items-center justify-center text-[#9c3e54]">
+                        <CreditCard className="w-5 h-5" />
+                      </div>
                     </div>
 
                     {paymentMethod === 'debit' && (
@@ -664,7 +669,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
               <div className="bg-white rounded-3xl p-6 shadow-[0_10px_28px_-4px_rgba(61,28,18,0.08)] border border-[#dac0c3]/30">
                 <h3 className="text-lg font-bold text-[#1d1b19] mb-4 flex items-center justify-between font-heading">
                   <span>Resumo do Pedido</span>
-                  <span className="material-symbols-outlined text-[#9c3e54] text-[20px]">receipt_long</span>
+                  <Receipt className="w-5 h-5 text-[#9c3e54]" />
                 </h3>
 
                 {/* Subtotals Breakdown */}
@@ -784,8 +789,8 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                       <Lock className="w-3 h-3 text-[#9c3e54]" /> Compra Segura
                     </span>
                     <span>•</span>
-                    <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-[13px] text-[#9c3e54]">kitchen</span> Embalagem Selada
+                    <span className="flex items-center gap-1">
+                      <PackageCheck className="w-3.5 h-3.5 text-[#9c3e54]" /> Embalagem Selada
                     </span>
                   </div>
                   <p className="text-[10px]">

@@ -1,6 +1,24 @@
 import React, { useState } from 'react';
-import { Star, Flame, Sparkles, Plus, Minus, Check, Lock, ArrowRight, ShieldCheck, Heart } from 'lucide-react';
+import { 
+  Star, 
+  Flame, 
+  Sparkles, 
+  Plus, 
+  Minus, 
+  Check, 
+  Lock, 
+  ArrowRight, 
+  ShieldCheck, 
+  Heart,
+  Clock,
+  Leaf,
+  Cookie,
+  ShoppingBag,
+  Award,
+  Bike
+} from 'lucide-react';
 import { Product, ProductAddon, Category } from '../types';
+import { CategoryIcon } from './CategoryIcon';
 
 interface MenuScreenProps {
   categories: Category[];
@@ -112,7 +130,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
           {/* Quick Delivery Time & Rating Badge */}
           <div className="flex items-center gap-4 p-3 bg-[#f8f3ee] rounded-2xl shadow-sm self-start md:self-auto border border-[#dac0c3]/30">
             <div className="w-10 h-10 rounded-full bg-[#9c3e54]/10 flex items-center justify-center text-[#9c3e54]">
-              <span className="material-symbols-outlined text-[22px]">timer</span>
+              <Clock className="w-5 h-5" />
             </div>
             <div className="flex flex-col pr-2">
               <span className="text-[10px] text-[#7f5347] uppercase font-bold tracking-wider">Entrega Expressa</span>
@@ -145,6 +163,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
                       : 'bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19]'
                   }`}
                 >
+                  <CategoryIcon iconName={cat.iconName} categoryId={cat.id} className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-[#9c3e54]'}`} />
                   <span>{cat.name}</span>
                   <span
                     className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -170,7 +189,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
                     : 'bg-white text-[#554245] hover:bg-[#f2ede8] border border-[#dac0c3]/40'
                 }`}
               >
-                <span className="material-symbols-outlined text-[15px] text-[#994703]">eco</span>
+                <Leaf className="w-3.5 h-3.5 text-[#994703]" />
                 <span>Sem Glúten / Sem Lactose</span>
               </button>
               <button
@@ -360,8 +379,8 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
                   alt={activeProduct.name}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute top-3 left-3 flex items-center gap-1 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md shadow-sm">
-                  <span className="material-symbols-outlined text-[16px] text-[#9c3e54]">bakery_dining</span>
+                <div className="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 backdrop-blur-md shadow-sm">
+                  <Cookie className="w-4 h-4 text-[#9c3e54]" />
                   <span className="text-[10px] text-[#1d1b19] uppercase font-bold">
                     {activeProduct.badgeTag || 'Artesanal'}
                   </span>
@@ -484,7 +503,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
                       </>
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
+                        <ShoppingBag className="w-4 h-4" />
                         <span>Adicionar ao Pedido</span>
                       </>
                     )}
@@ -507,7 +526,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
         <div className="mt-12 p-6 rounded-3xl bg-[#f8f3ee] grid grid-cols-1 md:grid-cols-3 gap-6 items-center border border-[#dac0c3]/30">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-[#9c3e54]/10 flex items-center justify-center text-[#9c3e54] shrink-0">
-              <span className="material-symbols-outlined text-[24px]">cookie</span>
+              <Cookie className="w-6 h-6 text-[#9c3e54]" />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-[#1d1b19]">Massa Fresquinha</span>
@@ -517,7 +536,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
 
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-[#fec4b4] flex items-center justify-center text-[#7a4f42] shrink-0">
-              <span className="material-symbols-outlined text-[24px]">workspace_premium</span>
+              <Award className="w-6 h-6 text-[#7a4f42]" />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-[#1d1b19]">Chocolate Belga</span>
@@ -527,7 +546,7 @@ export const MenuScreen: React.FC<MenuScreenProps> = ({
 
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-[#e6813f]/20 flex items-center justify-center text-[#994703] shrink-0">
-              <span className="material-symbols-outlined text-[24px]">electric_moped</span>
+              <Bike className="w-6 h-6 text-[#994703]" />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-[#1d1b19]">Envio Térmico Cuidadoso</span>

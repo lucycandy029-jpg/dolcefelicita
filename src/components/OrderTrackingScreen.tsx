@@ -8,24 +8,42 @@ import {
   RotateCcw, 
   Star, 
   ShieldCheck, 
-  ArrowLeft 
+  ArrowLeft,
+  XCircle,
+  CheckCircle2,
+  Cake,
+  Flame,
+  Bike,
+  Home,
+  Navigation,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
-import { Order, OrderStatus } from '../types';
+import { Order, OrderStatus, Address } from '../types';
 
 interface OrderTrackingScreenProps {
   order?: Order | null;
   pastOrders: Order[];
   onNavigateToMenu: () => void;
   onReorder: (order: Order) => void;
+  customerAddress?: Address | null;
+  customerName?: string;
 }
 
 export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
-  order,
+  order: propOrder,
   pastOrders,
   onNavigateToMenu,
-  onReorder
+  onReorder,
+  customerAddress,
+  customerName
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'canceled'>('active');
+  const [mapMode, setMapMode] = useState<'interactive' | 'satellite'>('interactive');
+  const [addressCopied, setAddressCopied] = useState<boolean>(false);
+
+  // If no active order, check if we have any order from history to display
+  const order = propOrder || (pastOrders && pastOrders.length > 0 ? pastOrders[0] : null);
 
   if (!order) {
     return (
@@ -50,6 +68,49 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
       </div>
     );
   }
+
+  // Resolve customer delivery address with thorough fallbacks
+  const resolvedAddress: Address = (() => {
+    if (order.address && (order.address.street || order.address.neighborhood)) {
+      return order.address;
+    }
+    if (customerAddress && (customerAddress.street || customerAddress.neighborhood)) {
+      return customerAddress;
+    }
+    try {
+      const saved = localStorage.getItem('felicita_active_address');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.street || parsed.neighborhood)) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return {
+      id: 'addr-default',
+      title: 'Endereço de Entrega',
+      street: 'Av. Paulista',
+      number: '1000',
+      complement: 'Apto 82',
+      neighborhood: 'Bela Vista',
+      city: 'São Paulo',
+      state: 'SP',
+      postalCode: '01310-100',
+      referencePoint: 'Portaria 24h • Tocar interfone 82',
+      isDefault: true
+    };
+  })();
+
+  const fullAddressString = `${resolvedAddress.street}, ${resolvedAddress.number}${resolvedAddress.complement ? ` - ${resolvedAddress.complement}` : ''}, ${resolvedAddress.neighborhood}, ${resolvedAddress.city} - ${resolvedAddress.state}${resolvedAddress.postalCode ? `, CEP ${resolvedAddress.postalCode}` : ''}`.trim();
+
+  const handleCopyAddress = () => {
+    navigator.clipboard.writeText(fullAddressString);
+    setAddressCopied(true);
+    setTimeout(() => setAddressCopied(false), 2500);
+  };
+
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddressString)}`;
+  const embedMapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(fullAddressString)}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
 
   // Dynamic stage calculation based on order.status
   const getStageInfo = (status: OrderStatus) => {
@@ -146,9 +207,13 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
               <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full text-white flex items-center justify-center shadow-lg shrink-0 ${
                 isCancelled ? 'bg-rose-600' : isDelivered ? 'bg-emerald-600' : 'bg-[#e87a90]'
               }`}>
-                <span className="material-symbols-outlined text-[32px] sm:text-[40px]">
-                  {isCancelled ? 'cancel' : isDelivered ? 'verified' : 'bakery_dining'}
-                </span>
+                {isCancelled ? (
+                  <XCircle className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                ) : isDelivered ? (
+                  <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                ) : (
+                  <Cake className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                )}
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -294,7 +359,7 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
                     {stage.currentStepIndex > 2 ? (
                       <Check className="w-5 h-5" />
                     ) : (
-                      <span className="material-symbols-outlined text-[20px]">oven_gen</span>
+                      <Flame className="w-5 h-5 text-[#994703]" />
                     )}
                     {stage.currentStepIndex === 2 && (
                       <span className="absolute -inset-1 rounded-full bg-[#e6813f]/40 animate-ping -z-10"></span>
@@ -336,7 +401,7 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
                     {stage.currentStepIndex >= 5 ? (
                       <Check className="w-5 h-5" />
                     ) : (
-                      <span className="material-symbols-outlined text-[22px]">two_wheeler</span>
+                      <Bike className="w-5 h-5" />
                     )}
                     {stage.currentStepIndex === 4 && (
                       <span className="absolute -inset-1 rounded-full bg-blue-400/40 animate-ping -z-10"></span>
@@ -376,7 +441,7 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
                     isDelivered ? 'bg-emerald-600 text-white shadow-md' : 'bg-[#e6e2dd] text-[#554245]'
                   }`}>
-                    {isDelivered ? <Check className="w-5 h-5" /> : <span className="material-symbols-outlined text-[22px]">home_pin</span>}
+                    {isDelivered ? <Check className="w-5 h-5" /> : <MapPin className="w-5 h-5" />}
                   </div>
                   <div className={`flex-1 flex flex-col sm:flex-row sm:items-center justify-between pt-1 rounded-2xl ${
                     isDelivered ? 'bg-emerald-50 p-4 border border-emerald-200' : ''
@@ -385,7 +450,9 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
                       <h3 className={`text-sm sm:text-base font-bold ${isDelivered ? 'text-emerald-900' : 'text-[#1d1b19]'}`}>
                         5. Pedido Entregue
                       </h3>
-                      <p className="text-xs text-[#554245]">Aproveite sua pausa doce com total felicidade!</p>
+                      <p className="text-xs text-[#554245]">
+                        Entrega no seu endereço: <strong className="text-[#1d1b19]">{resolvedAddress.street}, {resolvedAddress.number}</strong> ({resolvedAddress.neighborhood}, {resolvedAddress.city})
+                      </p>
                     </div>
                     <span className="text-[10px] font-bold mt-1 sm:mt-0 bg-[#f2ede8] px-2.5 py-0.5 rounded-full w-fit text-[#7f5347]">
                       {isDelivered ? 'Entregue com Sucesso' : 'Destino Final'}
@@ -454,28 +521,174 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Map & Courier Card */}
+          {/* RIGHT COLUMN: Map & Customer Delivery Address Card */}
           <div className="lg:col-span-4 flex flex-col gap-6">
             <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-[#dac0c3]/30 flex flex-col">
-              {/* Map simulated visual */}
-              <div className="relative w-full h-48 bg-[#f2ede8]">
-                <div
-                  className="w-full h-full bg-cover bg-center"
-                  style={{
-                    backgroundImage: `url('https://lh3.googleusercontent.com/aida-public/AB6AXuBCECkCq6SlVLxAviGn8IGxwlJj8P-OWzTXRlnPV_gEPZzXyPZT7IOto0-Jx1Wu1New7UF6dKA5RkVrKfubPOBQ6asCgeW0bqU0a97zXQUJMDIpimAztsmCGIvnNY94cdyofqQv-iDFDxLa0gFAA8OCtl8lYojtwlc2V8GcpFadbrZqLNWpokE_bgbO2cngMwtlbC7CYlgKLfJqxsktyeUotz0U9urPsf0-wEoBvdk5sTze8kiR4meG_w')`
-                  }}
-                ></div>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between p-2.5 rounded-xl bg-white/95 backdrop-blur-md">
-                  <div className="flex items-center gap-1.5 text-xs text-[#1d1b19] font-bold truncate">
+              {/* Map Header with View Switcher */}
+              <div className="p-4 bg-[#f8f3ee] border-b border-[#dac0c3]/20 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-[#ffd9de] flex items-center justify-center text-[#9c3e54] shrink-0">
+                    <Navigation className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-bold text-[#1d1b19] font-heading truncate">
+                      Mapa de Entrega em Tempo Real
+                    </h3>
+                    <p className="text-[10px] text-[#7f5347] truncate">
+                      Destino: {resolvedAddress.neighborhood}, {resolvedAddress.city}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 bg-white p-1 rounded-xl shadow-xs border border-[#dac0c3]/30 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setMapMode('interactive')}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      mapMode === 'interactive'
+                        ? 'bg-[#9c3e54] text-white shadow-xs'
+                        : 'text-[#554245] hover:text-[#1d1b19]'
+                    }`}
+                  >
+                    Mapa Vivo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapMode('satellite')}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      mapMode === 'satellite'
+                        ? 'bg-[#9c3e54] text-white shadow-xs'
+                        : 'text-[#554245] hover:text-[#1d1b19]'
+                    }`}
+                  >
+                    Trajeto
+                  </button>
+                </div>
+              </div>
+
+              {/* Map View Area */}
+              <div className="relative w-full h-56 bg-[#f2ede8] overflow-hidden">
+                {mapMode === 'interactive' ? (
+                  <iframe
+                    title="Mapa de Entrega do Cliente"
+                    src={embedMapsUrl}
+                    className="w-full h-full border-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full bg-cover bg-center relative"
+                    style={{
+                      backgroundImage: `url('https://lh3.googleusercontent.com/aida-public/AB6AXuBCECkCq6SlVLxAviGn8IGxwlJj8P-OWzTXRlnPV_gEPZzXyPZT7IOto0-Jx1Wu1New7UF6dKA5RkVrKfubPOBQ6asCgeW0bqU0a97zXQUJMDIpimAztsmCGIvnNY94cdyofqQv-iDFDxLa0gFAA8OCtl8lYojtwlc2V8GcpFadbrZqLNWpokE_bgbO2cngMwtlbC7CYlgKLfJqxsktyeUotz0U9urPsf0-wEoBvdk5sTze8kiR4meG_w')`
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+                  </div>
+                )}
+
+                {/* Floating Map Pin Badge */}
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between p-2 rounded-xl bg-white/95 backdrop-blur-md shadow-md border border-[#dac0c3]/30">
+                  <div className="flex items-center gap-1.5 text-xs text-[#1d1b19] font-bold min-w-0">
                     <MapPin className="w-4 h-4 text-[#9c3e54] shrink-0" />
                     <span className="truncate">
-                      {order.address?.street ? `${order.address.street}, ${order.address.number}${order.address.complement ? ` - ${order.address.complement}` : ''}` : 'Endereço de Entrega'}
+                      {resolvedAddress.street}, {resolvedAddress.number}
                     </span>
                   </div>
-                  <span className="text-[10px] text-[#7f5347] font-extrabold uppercase shrink-0">
-                    3.2 km
+                  <span className="text-[10px] text-[#7f5347] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#ffd9de]/50 shrink-0">
+                    3.2 km • ~12 min
                   </span>
+                </div>
+              </div>
+
+              {/* DEDICATED CUSTOMER DELIVERY ADDRESS SECTION */}
+              <div className="p-5 border-b border-[#dac0c3]/20 bg-gradient-to-b from-[#fef8f3] to-white flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Home className="w-4 h-4 text-[#9c3e54]" />
+                    <span className="text-xs font-bold text-[#1d1b19] font-heading uppercase tracking-wider">
+                      Endereço de Entrega do Cliente
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    Destino Confirmado
+                  </span>
+                </div>
+
+                {/* Detailed Address Block */}
+                <div className="p-3.5 rounded-2xl bg-white border border-[#dac0c3]/40 shadow-xs flex flex-col gap-1.5 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-col">
+                      <span className="font-extrabold text-[#1d1b19] text-sm">
+                        {resolvedAddress.street}, Nº {resolvedAddress.number}
+                      </span>
+                      {resolvedAddress.complement && (
+                        <span className="text-[11px] text-[#7f5347] font-semibold">
+                          Complemento: {resolvedAddress.complement}
+                        </span>
+                      )}
+                    </div>
+                    {resolvedAddress.postalCode && (
+                      <span className="text-[10px] text-[#877274] bg-[#f2ede8] px-2 py-0.5 rounded-full font-mono font-bold shrink-0">
+                        CEP {resolvedAddress.postalCode}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[#554245] text-xs">
+                    {resolvedAddress.neighborhood} • {resolvedAddress.city} - {resolvedAddress.state}
+                  </p>
+
+                  {resolvedAddress.referencePoint && (
+                    <div className="mt-1 pt-1.5 border-t border-[#f2ede8] text-[11px] text-[#7f5347] flex items-center gap-1">
+                      <span className="font-bold text-[#9c3e54]">Ponto de ref:</span>
+                      <span className="italic">{resolvedAddress.referencePoint}</span>
+                    </div>
+                  )}
+
+                  <div className="mt-0.5 text-[11px] text-[#877274]">
+                    <span>Destinatário: </span>
+                    <strong className="text-[#1d1b19]">{order.customerName || customerName || 'Cliente Felicitá'}</strong>
+                    {order.customerPhone && (
+                      <span className="ml-2 font-mono">({order.customerPhone})</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Address Action Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={googleMapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="py-2 px-3 rounded-xl bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    title="Abrir no Google Maps externo"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-[#9c3e54]" />
+                    <span>Ver no Maps</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyAddress}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                      addressCopied
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-[#9c3e54] hover:bg-[#64132b] text-white shadow-xs'
+                    }`}
+                  >
+                    {addressCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar Endereço</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -489,7 +702,7 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
                       className="w-14 h-14 rounded-full object-cover shadow-sm border border-[#dac0c3]/40"
                     />
                     <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-[#9c3e54] border-2 border-white flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[10px] text-white">two_wheeler</span>
+                      <Bike className="w-2.5 h-2.5 text-white" />
                     </span>
                   </div>
                   <div className="flex flex-col">
@@ -599,7 +812,7 @@ export const OrderTrackingScreen: React.FC<OrderTrackingScreenProps> = ({
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-[#ffdbc9] flex items-center justify-center text-[#572500] shrink-0">
-                    <span className="material-symbols-outlined text-[24px]">cake</span>
+                    <Cake className="w-6 h-6" />
                   </div>
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">

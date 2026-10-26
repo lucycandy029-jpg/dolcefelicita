@@ -1,7 +1,7 @@
 import { Product, Category, Address, Order, User } from '../types';
 
 export const INITIAL_CATEGORIES: Category[] = [
-  { id: 'all', name: 'Todos', iconName: 'cake', count: 38 },
+  { id: 'all', name: 'Todos', iconName: 'sparkles', count: 38 },
   { id: 'cookies', name: 'Cookies Artesanais', iconName: 'cookie', count: 12 },
   { id: 'brownies', name: 'Brownies & Fudges', iconName: 'bakery_dining', count: 8 },
   { id: 'bolos-tortas', name: 'Bolos & Tortas', iconName: 'cake', count: 9 },

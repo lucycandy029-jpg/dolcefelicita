@@ -153,7 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => onNavigate('rastreio')}
                 title="Notificações do pedido"
-                className="relative w-9 h-9 rounded-full flex items-center justify-center bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19] transition-colors cursor-pointer"
+                className="hidden sm:flex relative w-9 h-9 rounded-full items-center justify-center bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19] transition-colors cursor-pointer"
               >
                 <Bell className="w-4 h-4" />
                 <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#9c3e54] ring-2 ring-[#fef8f3]"></span>
@@ -162,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => onNavigate('cardapio')}
                 title="Favoritos"
-                className="relative w-9 h-9 rounded-full flex items-center justify-center bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19] transition-colors cursor-pointer"
+                className="hidden sm:flex relative w-9 h-9 rounded-full items-center justify-center bg-[#f2ede8] hover:bg-[#ece7e2] text-[#1d1b19] transition-colors cursor-pointer"
               >
                 <Heart className="w-4 h-4" />
                 <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full bg-[#fec4b4] text-[#7a4f42] text-[10px] font-bold flex items-center justify-center">
@@ -173,11 +173,18 @@ export const Header: React.FC<HeaderProps> = ({
               {/* Checkout Bag button */}
               <button
                 onClick={() => onNavigate('carrinho')}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-[#9c3e54] hover:bg-[#64132b] text-white transition-all shadow-[0_4px_16px_-2px_rgba(156,62,84,0.35)] cursor-pointer"
+                className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 rounded-full bg-[#9c3e54] hover:bg-[#64132b] text-white transition-all shadow-[0_4px_16px_-2px_rgba(156,62,84,0.35)] cursor-pointer"
               >
-                <ShoppingBag className="w-4 h-4" />
+                <div className="relative flex items-center justify-center">
+                  <ShoppingBag className="w-4 h-4" />
+                  {cartCount > 0 && (
+                    <span className="sm:hidden absolute -top-1.5 -right-2 w-4 h-4 rounded-full bg-white text-[#9c3e54] text-[9px] font-extrabold flex items-center justify-center">
+                      {cartCount}
+                    </span>
+                  )}
+                </div>
                 <span className="text-xs font-bold whitespace-nowrap">
-                  {cartCount} {cartCount === 1 ? 'item' : 'itens'} • R$ {cartTotal.toFixed(2).replace('.', ',')}
+                  <span className="hidden sm:inline">{cartCount} {cartCount === 1 ? 'item' : 'itens'} • </span>R$ {cartTotal.toFixed(2).replace('.', ',')}
                 </span>
               </button>
             </>

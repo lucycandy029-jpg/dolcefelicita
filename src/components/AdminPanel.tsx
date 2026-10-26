@@ -32,9 +32,12 @@ import {
   Navigation,
   MapPin,
   Phone,
-  RotateCcw
+  RotateCcw,
+  Cake,
+  QrCode
 } from 'lucide-react';
 import { Order, Product, OrderStatus, Category, ProductAddon, StoreSettings, Customer } from '../types';
+import { CategoryIcon } from './CategoryIcon';
 
 interface AdminPanelProps {
   orders: Order[];
@@ -1231,8 +1234,8 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
                 className="p-4 rounded-2xl bg-[#f8f3ee] border border-[#dac0c3]/30 flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#9c3e54] font-bold shadow-sm">
-                    <span className="material-symbols-outlined text-[20px]">{cat.iconName || 'cake'}</span>
+                  <div className="w-10 h-10 rounded-xl bg-[#ffd9de]/30 flex items-center justify-center text-[#9c3e54] font-bold shadow-sm">
+                    <CategoryIcon iconName={cat.iconName} categoryId={cat.id} className="w-5 h-5 text-[#9c3e54]" />
                   </div>
                   <div className="flex flex-col">
                     <span className="text-sm font-bold text-[#1d1b19] font-heading">{cat.name}</span>
@@ -1461,7 +1464,7 @@ Tenha uma excelente entrega e vá com segurança! 🚴💨`;
             <div className="sm:col-span-2 mt-4 p-5 rounded-2xl bg-[#ffd9de]/20 border border-[#dac0c3]/50 flex flex-col gap-4">
               <div className="flex items-center gap-2.5 pb-2 border-b border-[#dac0c3]/30">
                 <div className="w-8 h-8 rounded-full bg-[#9c3e54] text-white flex items-center justify-center font-bold">
-                  <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
+                  <QrCode className="w-4 h-4 text-white" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-[#1d1b19] font-heading">

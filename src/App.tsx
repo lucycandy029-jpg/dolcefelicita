@@ -842,6 +842,8 @@ export default function App() {
                 pastOrders={pastCustomerOrders}
                 onNavigateToMenu={() => setCurrentTab('cardapio')}
                 onReorder={handleReorder}
+                customerAddress={activeAddress}
+                customerName={currentUser.name}
               />
             )}
 
