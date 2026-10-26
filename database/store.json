@@ -585,7 +585,7 @@
     }
   ],
   "isRevenueReset": false,
-  "lastUpdated": 1792966109865,
+  "lastUpdated": 1793014461985,
   "sessions": {
     "6651abd93918646d06342b53e34e2635270e9e67d7e9d7c2ebd93e2d81ea0a8d": {
       "userId": "41f2e115-877e-4438-be26-4ea6e2dd0e88",
@@ -594,6 +594,26 @@
     "e03ea21a51c1b895ae1f7b8c2119d00f4826a7da5d61f95621a8bff129613bb4": {
       "userId": "41f2e115-877e-4438-be26-4ea6e2dd0e88",
       "expiresAt": 1795353978519
+    },
+    "c3f710354707b14f41e7783cdb7964164e2ba4bf3fcb81f67a5a5691978f222d": {
+      "userId": "usr-admin-master",
+      "expiresAt": 1795563133015
+    },
+    "21eb5691550e7722a9e122c3c8cd9c51fd5636816c1ca3f46a3c7c8d6759b57c": {
+      "userId": "41f2e115-877e-4438-be26-4ea6e2dd0e88",
+      "expiresAt": 1795563139736
+    },
+    "d51a8b6551f5ac7177107a741fe06ac5537d160d35a4ce8abca0b8dc9067069e": {
+      "userId": "usr-admin-master",
+      "expiresAt": 1795606455134
+    },
+    "8bd3a49dcf21bfbfb375f3810034909944e66c4ff241d24385ac3a34a36d8662": {
+      "userId": "usr-mariana-01",
+      "expiresAt": 1795606455158
+    },
+    "8159ef38f52bf58d8433396fd67d982a6bd3a05b940f9f44d45a9c31fc9fd221": {
+      "userId": "41f2e115-877e-4438-be26-4ea6e2dd0e88",
+      "expiresAt": 1795606461985
     }
   }
 }

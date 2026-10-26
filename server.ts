@@ -163,13 +163,44 @@ function saveStore(data: StoreState) {
   }
 }
 
+// Session extraction helper supporting Headers (Bearer token / X-Session-ID) and HttpOnly Cookies
+function extractSessionId(req: Request): string | null {
+  // 1. Authorization header: "Bearer <token>"
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+  if (authHeader && typeof authHeader === 'string') {
+    const parts = authHeader.trim().split(' ');
+    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer' && parts[1]) {
+      return parts[1].trim();
+    }
+    if (parts.length === 1 && parts[0].length >= 16) {
+      return parts[0].trim();
+    }
+  }
+
+  // 2. Custom header X-Session-ID
+  const xSessionId = req.headers['x-session-id'] || req.headers['X-Session-ID'];
+  if (xSessionId && typeof xSessionId === 'string' && xSessionId.trim()) {
+    return xSessionId.trim();
+  }
+
+  // 3. HttpOnly cookie (signed or unsigned)
+  if (req.cookies && req.cookies.felicita_session) {
+    return req.cookies.felicita_session;
+  }
+  if (req.signedCookies && req.signedCookies.felicita_session) {
+    return req.signedCookies.felicita_session;
+  }
+
+  return null;
+}
+
 // Cookie helper
 function setAuthCookie(req: Request, res: Response, sessionId: string) {
   const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
   res.cookie('felicita_session', sessionId, {
     httpOnly: true,
     secure: isHttps,
-    sameSite: 'lax',
+    sameSite: isHttps ? 'none' : 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     path: '/'
   });
@@ -180,6 +211,75 @@ function clearAuthCookie(res: Response) {
     httpOnly: true,
     path: '/'
   });
+}
+
+// Authoritative user resolution per session ID
+async function getUserFromSession(sessionId: string): Promise<{ user: User; address?: Address; customer?: Customer | null } | null> {
+  if (!sessionId || typeof sessionId !== 'string') return null;
+
+  // 1. PostgreSQL session verification
+  if (isPgConnected()) {
+    try {
+      const pgSession = await pgGetSession(sessionId);
+      if (pgSession) {
+        const cust = store.customers.find(c => c.email.toLowerCase() === pgSession.user.email.toLowerCase()) || null;
+        return {
+          user: pgSession.user,
+          customer: cust,
+          address: pgSession.address || cust?.address || DEFAULT_ADDRESS
+        };
+      }
+    } catch (err) {
+      console.warn('PostgreSQL session lookup error:', err);
+    }
+  }
+
+  // 2. In-memory / JSON store fallback
+  const localSession = store.sessions[sessionId];
+  if (localSession && localSession.expiresAt > Date.now()) {
+    const user = store.users.find(u => u.id === localSession.userId);
+    if (user) {
+      const cust = store.customers.find(c => c.email.toLowerCase() === user.email.toLowerCase()) || null;
+      return {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          createdAt: user.createdAt
+        },
+        customer: cust,
+        address: cust?.address || user.address || DEFAULT_ADDRESS
+      };
+    }
+  }
+
+  return null;
+}
+
+// Express Middleware: Require Admin role
+async function requireAdmin(req: Request, res: Response, next: () => void) {
+  const sessionId = extractSessionId(req);
+  if (!sessionId) {
+    res.status(401).json({ success: false, message: 'Autenticação necessária. Sessão não informada.' });
+    return;
+  }
+
+  const sessionData = await getUserFromSession(sessionId);
+  if (!sessionData) {
+    res.status(401).json({ success: false, message: 'Sessão inválida ou expirada. Faça login novamente.' });
+    return;
+  }
+
+  if (sessionData.user.role !== 'admin') {
+    res.status(403).json({ success: false, message: 'Acesso restrito ao administrador. Sua conta de cliente não possui permissão para esta ação.' });
+    return;
+  }
+
+  (req as any).user = sessionData.user;
+  (req as any).sessionId = sessionId;
+  next();
 }
 
 // SSE Clients for cross-device, cross-browser real-time broadcast
@@ -337,57 +437,32 @@ async function startServer() {
   // AUTHENTICATION & MULTI-DEVICE / MULTI-BROWSER ACCOUNT SYNC
   // ============================================================================
 
-  // 1. Session verification (/api/auth/me) - called on app load by any browser
+  // 1. Session verification (/api/auth/me) - returns exclusively the session for the requesting client
   app.get('/api/auth/me', async (req: Request, res: Response) => {
-    const sessionId = req.cookies.felicita_session || req.signedCookies.felicita_session;
+    const sessionId = extractSessionId(req);
 
     if (!sessionId) {
       res.json({ success: false, user: null, message: 'Nenhuma sessão ativa.' });
       return;
     }
 
-    // Try PostgreSQL session lookup first
-    if (isPgConnected()) {
-      const pgSession = await pgGetSession(sessionId);
-      if (pgSession) {
-        // Also locate customer profile if exists
-        const cust = store.customers.find(c => c.email.toLowerCase() === pgSession.user.email.toLowerCase()) || null;
-        res.json({
-          success: true,
-          user: pgSession.user,
-          customer: cust,
-          address: pgSession.address || cust?.address || DEFAULT_ADDRESS
-        });
-        return;
-      }
+    const sessionData = await getUserFromSession(sessionId);
+    if (!sessionData) {
+      clearAuthCookie(res);
+      res.json({ success: false, user: null, message: 'Sessão expirada ou inválida.' });
+      return;
     }
 
-    // Fallback to local store session
-    const localSession = store.sessions[sessionId];
-    if (localSession && localSession.expiresAt > Date.now()) {
-      const user = store.users.find(u => u.id === localSession.userId);
-      if (user) {
-        const cust = store.customers.find(c => c.email.toLowerCase() === user.email.toLowerCase()) || null;
-        res.json({
-          success: true,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            role: user.role,
-            createdAt: user.createdAt
-          },
-          customer: cust,
-          address: cust?.address || user.address || DEFAULT_ADDRESS
-        });
-        return;
-      }
-    }
+    // Refresh cookie expiry
+    setAuthCookie(req, res, sessionId);
 
-    // Session expired or not found
-    clearAuthCookie(res);
-    res.json({ success: false, user: null, message: 'Sessão expirada.' });
+    res.json({
+      success: true,
+      token: sessionId,
+      user: sessionData.user,
+      customer: sessionData.customer,
+      address: sessionData.address
+    });
   });
 
   // Helper validation functions for strict client registration
@@ -471,13 +546,22 @@ async function startServer() {
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       if (isPgConnected()) {
-        await pgCreateSession(sessionId, adminUser.id, expiresAt);
+        await pgCreateSession(sessionId, adminUser.id, expiresAt, {
+          name: adminUser.name,
+          email: adminUser.email,
+          role: 'admin'
+        });
       }
       store.sessions[sessionId] = { userId: adminUser.id, expiresAt: expiresAt.getTime() };
       saveStore(store);
 
       setAuthCookie(req, res, sessionId);
-      res.json({ success: true, user: adminUser, address: DEFAULT_ADDRESS });
+      res.json({
+        success: true,
+        token: sessionId,
+        user: adminUser,
+        address: DEFAULT_ADDRESS
+      });
       return;
     }
 
@@ -499,7 +583,11 @@ async function startServer() {
 
         const sessionId = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await pgCreateSession(sessionId, pgUserResult.user.id, expiresAt);
+        await pgCreateSession(sessionId, pgUserResult.user.id, expiresAt, {
+          name: pgUserResult.user.name,
+          email: pgUserResult.user.email,
+          role: pgUserResult.user.role
+        });
 
         store.sessions[sessionId] = { userId: pgUserResult.user.id, expiresAt: expiresAt.getTime() };
         saveStore(store);
@@ -509,6 +597,7 @@ async function startServer() {
         const cust = store.customers.find(c => c.email.toLowerCase() === normalizedEmail) || null;
         res.json({
           success: true,
+          token: sessionId,
           user: pgUserResult.user,
           customer: cust,
           address: pgUserResult.address || cust?.address || DEFAULT_ADDRESS
@@ -556,6 +645,7 @@ async function startServer() {
 
       res.json({
         success: true,
+        token: sessionId,
         user: publicUser,
         customer: customerRecord || null,
         address: resolvedAddress
@@ -725,7 +815,11 @@ async function startServer() {
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     if (isPgConnected()) {
-      await pgCreateSession(sessionId, createdUser.id, expiresAt);
+      await pgCreateSession(sessionId, createdUser.id, expiresAt, {
+        name: createdUser.name,
+        email: createdUser.email,
+        role: createdUser.role
+      });
     }
     store.sessions[sessionId] = { userId: createdUser.id, expiresAt: expiresAt.getTime() };
     saveStore(store);
@@ -735,6 +829,7 @@ async function startServer() {
 
     res.json({
       success: true,
+      token: sessionId,
       message: 'Cadastro realizado com sucesso! Seja bem-vindo à Dolce Felicitá.',
       user: createdUser,
       customer: newCust,
@@ -742,15 +837,19 @@ async function startServer() {
     });
   });
 
-  // 4. Logout endpoint (/api/auth/logout)
+  // 4. Logout endpoint (/api/auth/logout) - terminates strictly the requesting session
   app.post('/api/auth/logout', async (req: Request, res: Response) => {
-    const sessionId = req.cookies.felicita_session || req.signedCookies.felicita_session;
+    const sessionId = extractSessionId(req);
     if (sessionId) {
       if (isPgConnected()) {
-        await pgDeleteSession(sessionId);
+        try {
+          await pgDeleteSession(sessionId);
+        } catch (e) {}
       }
-      delete store.sessions[sessionId];
-      saveStore(store);
+      if (store.sessions[sessionId]) {
+        delete store.sessions[sessionId];
+        saveStore(store);
+      }
     }
 
     clearAuthCookie(res);
@@ -797,6 +896,19 @@ async function startServer() {
   // ORDERS API
   // ============================================================================
   app.post('/api/orders', async (req: Request, res: Response) => {
+    // Prohibit administrators from placing orders
+    const sessionId = extractSessionId(req);
+    if (sessionId) {
+      const sessionData = await getUserFromSession(sessionId);
+      if (sessionData && sessionData.user.role === 'admin') {
+        res.status(403).json({
+          success: false,
+          message: 'Administradores não podem realizar pedidos. O painel administrativo é exclusivo para gestão.'
+        });
+        return;
+      }
+    }
+
     const { order } = req.body;
     if (!order || !order.id) {
       res.status(400).json({ success: false, message: 'Dados do pedido inválidos' });
@@ -831,7 +943,7 @@ async function startServer() {
     res.json({ success: true, order, orders: store.orders });
   });
 
-  app.patch('/api/orders/:id/status', async (req: Request, res: Response) => {
+  app.patch('/api/orders/:id/status', requireAdmin, async (req: Request, res: Response) => {
     const orderId = req.params.id;
     const { status } = req.body as { status: OrderStatus };
 
@@ -849,7 +961,7 @@ async function startServer() {
     res.json({ success: true, orders: store.orders });
   });
 
-  app.patch('/api/orders/:id/courier', (req: Request, res: Response) => {
+  app.patch('/api/orders/:id/courier', requireAdmin, (req: Request, res: Response) => {
     const orderId = req.params.id;
     const { courierName, courierPhone } = req.body;
 
@@ -876,7 +988,7 @@ async function startServer() {
     res.json({ success: true, orders: store.orders });
   });
 
-  app.delete('/api/orders/:id', async (req: Request, res: Response) => {
+  app.delete('/api/orders/:id', requireAdmin, async (req: Request, res: Response) => {
     const orderId = req.params.id;
     if (isPgConnected()) {
       await pgDeleteOrder(orderId);
@@ -887,7 +999,7 @@ async function startServer() {
     res.json({ success: true, orders: store.orders });
   });
 
-  app.delete('/api/orders', (_req: Request, res: Response) => {
+  app.delete('/api/orders', requireAdmin, (_req: Request, res: Response) => {
     store.orders = [];
     saveStore(store);
     broadcast('ORDERS_UPDATED', store.orders);
@@ -895,9 +1007,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // PRODUCTS API
+  // PRODUCTS API (Admin Protected)
   // ============================================================================
-  app.post('/api/products', async (req: Request, res: Response) => {
+  app.post('/api/products', requireAdmin, async (req: Request, res: Response) => {
     const product = req.body as Product;
     if (!product || !product.id || !product.name) {
       res.status(400).json({ success: false, message: 'Dados do produto inválidos' });
@@ -922,7 +1034,7 @@ async function startServer() {
     res.json({ success: true, products: store.products, categories: store.categories });
   });
 
-  app.put('/api/products/:id', async (req: Request, res: Response) => {
+  app.put('/api/products/:id', requireAdmin, async (req: Request, res: Response) => {
     const productId = req.params.id;
     const updated = req.body as Product;
 
@@ -937,7 +1049,7 @@ async function startServer() {
     res.json({ success: true, products: store.products });
   });
 
-  app.delete('/api/products/:id', async (req: Request, res: Response) => {
+  app.delete('/api/products/:id', requireAdmin, async (req: Request, res: Response) => {
     const productId = req.params.id;
     const prod = store.products.find(p => p.id === productId || p.slug === productId);
 
@@ -960,7 +1072,7 @@ async function startServer() {
     res.json({ success: true, products: store.products, categories: store.categories });
   });
 
-  app.patch('/api/products/:id/stock', async (req: Request, res: Response) => {
+  app.patch('/api/products/:id/stock', requireAdmin, async (req: Request, res: Response) => {
     const productId = req.params.id;
     const { quantity, delta } = req.body;
 
@@ -990,9 +1102,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // CATEGORIES API
+  // CATEGORIES API (Admin Protected)
   // ============================================================================
-  app.post('/api/categories', async (req: Request, res: Response) => {
+  app.post('/api/categories', requireAdmin, async (req: Request, res: Response) => {
     const newCat = req.body as Category;
     if (!newCat || !newCat.name) {
       res.status(400).json({ success: false, message: 'Dados da categoria inválidos' });
@@ -1009,7 +1121,7 @@ async function startServer() {
     res.json({ success: true, categories: store.categories });
   });
 
-  app.delete('/api/categories/:id', async (req: Request, res: Response) => {
+  app.delete('/api/categories/:id', requireAdmin, async (req: Request, res: Response) => {
     const catId = req.params.id;
 
     if (isPgConnected()) {
@@ -1027,9 +1139,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // ADDONS API
+  // ADDONS API (Admin Protected)
   // ============================================================================
-  app.post('/api/addons', async (req: Request, res: Response) => {
+  app.post('/api/addons', requireAdmin, async (req: Request, res: Response) => {
     const addon = req.body as ProductAddon;
     if (!addon || !addon.name) {
       res.status(400).json({ success: false, message: 'Dados da personalização inválidos' });
@@ -1046,7 +1158,7 @@ async function startServer() {
     res.json({ success: true, addons: store.addons });
   });
 
-  app.delete('/api/addons/:id', async (req: Request, res: Response) => {
+  app.delete('/api/addons/:id', requireAdmin, async (req: Request, res: Response) => {
     const addonId = req.params.id;
 
     if (isPgConnected()) {
@@ -1060,16 +1172,16 @@ async function startServer() {
   });
 
   // ============================================================================
-  // STORE SETTINGS & REVENUE
+  // STORE SETTINGS & REVENUE (Admin Protected)
   // ============================================================================
-  app.put('/api/store-settings', (req: Request, res: Response) => {
+  app.put('/api/store-settings', requireAdmin, (req: Request, res: Response) => {
     store.storeSettings = req.body as StoreSettings;
     saveStore(store);
     broadcast('STORE_SETTINGS_UPDATED', store.storeSettings);
     res.json({ success: true, storeSettings: store.storeSettings });
   });
 
-  app.post('/api/revenue/reset', (req: Request, res: Response) => {
+  app.post('/api/revenue/reset', requireAdmin, (req: Request, res: Response) => {
     const { isRevenueReset } = req.body;
     store.isRevenueReset = Boolean(isRevenueReset);
     saveStore(store);
@@ -1078,9 +1190,9 @@ async function startServer() {
   });
 
   // ============================================================================
-  // CUSTOMERS API
+  // CUSTOMERS API (Admin Protected)
   // ============================================================================
-  app.delete('/api/customers/:id', (req: Request, res: Response) => {
+  app.delete('/api/customers/:id', requireAdmin, (req: Request, res: Response) => {
     const custId = req.params.id;
     store.customers = store.customers.filter(c => c.id !== custId);
     saveStore(store);

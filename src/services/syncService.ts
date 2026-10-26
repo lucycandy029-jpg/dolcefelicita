@@ -160,7 +160,21 @@ const TOKEN_KEY = 'felicita_auth_token';
 
 export function getAuthToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+    // Check sessionStorage first for per-tab / per-window instance isolation
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const sessionVal = sessionStorage.getItem(TOKEN_KEY);
+      if (sessionVal && sessionVal.trim()) {
+        return sessionVal.trim();
+      }
+    }
+    // Fallback to localStorage
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const localVal = localStorage.getItem(TOKEN_KEY);
+      if (localVal && localVal.trim()) {
+        return localVal.trim();
+      }
+    }
+    return null;
   } catch (e) {
     return null;
   }
@@ -168,12 +182,13 @@ export function getAuthToken(): string | null {
 
 export function setAuthToken(token: string | null) {
   try {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-      sessionStorage.setItem(TOKEN_KEY, token);
+    if (typeof window === 'undefined') return;
+    if (token && token.trim()) {
+      sessionStorage.setItem(TOKEN_KEY, token.trim());
+      localStorage.setItem(TOKEN_KEY, token.trim());
     } else {
-      localStorage.removeItem(TOKEN_KEY);
       sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
     }
   } catch (e) {}
 }

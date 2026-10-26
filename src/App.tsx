@@ -202,21 +202,24 @@ export default function App() {
     };
   }, []);
 
-  // Sync user profile across devices if logged in
+  // Sync customer profile if logged in as customer
   useEffect(() => {
-    if (currentUser.email) {
+    if (currentUser.role === 'customer' && currentUser.email) {
       api.getCustomerProfile(currentUser.email).then(res => {
-        if (res && res.success) {
+        if (res && res.success && res.user && res.user.email.toLowerCase() === currentUser.email.toLowerCase()) {
           if (res.address && !activeAddress) {
             setActiveAddress(res.address);
           }
-          if (res.user) {
-            setCurrentUser(prev => ({ ...prev, ...res.user }));
-          }
+          setCurrentUser(prev => {
+            if (prev.email.toLowerCase() === res.user.email.toLowerCase()) {
+              return { ...prev, ...res.user };
+            }
+            return prev;
+          });
         }
       }).catch(() => {});
     }
-  }, [currentUser.email]);
+  }, [currentUser.email, currentUser.role]);
 
   // isRevenueReset state - persisted in localStorage & server
   const [isRevenueReset, setIsRevenueReset] = useState<boolean>(() => {
